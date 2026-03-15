@@ -176,6 +176,57 @@ class FakeEmbeddingService:
         ]
 
 
+class FakeStreamingGraph:
+    async def astream(self, initial_state: dict[str, Any], *, stream_mode: str = "updates"):
+        assert initial_state["user_query"] == "What patterns show up in packaging feedback?"
+        assert stream_mode == "updates"
+
+        yield {
+            "router": {
+                "planned_agents": ["competitive_landscape_agent"],
+                "trace_data": {
+                    "router_plan": {
+                        "selected_agents": ["competitive_landscape_agent"],
+                        "reasoning": "Competitor comparisons are central to the query.",
+                    }
+                },
+            }
+        }
+        yield {
+            "competitive_landscape_agent": {
+                "agent_outputs": {
+                    "competitive_landscape_agent": {
+                        "agent_name": "competitive_landscape_agent",
+                        "status": "completed",
+                        "result": {
+                            "analysis": {
+                                "summary": "Competitor positioning clusters around packaging simplicity.",
+                                "confidence_score": 84,
+                            }
+                        },
+                        "error": None,
+                    }
+                }
+            }
+        }
+        yield {
+            "synthesis": {
+                "synthesis_result": {
+                    "summary": "Packaging feedback is increasingly framed as a competitive differentiator."
+                },
+                "artifacts": [
+                    {
+                        "type": "scorecard",
+                        "title": "Packaging signals",
+                        "data": {"rows": [{"label": "Competitive pressure", "value": 84}]},
+                    }
+                ],
+                "tokens_used": 88,
+                "cost_estimate": 0.13,
+            }
+        }
+
+
 @pytest.fixture
 def fake_db() -> FakeDatabase:
     return FakeDatabase()
@@ -291,3 +342,65 @@ def test_websocket_path_endpoint_accepts_session_in_path() -> None:
         connected_message = websocket.receive_json()
         assert connected_message["type"] == "status"
         assert connected_message["session_id"] == "session-path-1"
+
+
+def test_orchestrator_service_streams_graph_agent_status_updates(
+    fake_db: FakeDatabase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reset_manager_state()
+    session_id = add_session(fake_db)
+
+    service = OrchestratorService(
+        fake_db,
+        manager=get_connection_manager(),
+        embedding_service_cls=FakeEmbeddingService,
+    )
+
+    async def fake_get_graph() -> FakeStreamingGraph:
+        return FakeStreamingGraph()
+
+    monkeypatch.setattr(service, "_get_graph", fake_get_graph)
+
+    import anyio
+
+    result = anyio.run(
+        lambda: service.run(
+            session_id=session_id,
+            user_id="user-1",
+            query="What patterns show up in packaging feedback?",
+        )
+    )
+
+    assert result["synthesis"] == "Packaging feedback is increasingly framed as a competitive differentiator."
+    assert result["artifacts"][-1]["type"] == "scorecard"
+    assert result["tokens_used"] == 88
+    assert result["cost"] == 0.13
+    assert len(result["trace"]["agents"]) == 1
+    assert result["trace"]["agents"][0]["name"] == "competitive_landscape_agent"
+    assert result["trace"]["agents"][0]["status"] == "completed"
+    assert result["trace"]["agents"][0]["error"] is None
+    assert result["trace"]["agents"][0]["result"] == {
+        "summary": "Competitor positioning clusters around packaging simplicity.",
+        "confidence_score": 84,
+    }
+    assert isinstance(result["trace"]["agents"][0]["duration_ms"], int)
+    assert result["trace"]["planned_agents"] == ["competitive_landscape_agent"]
+    assert isinstance(result["trace"]["duration_ms"], int)
+
+    queued_messages = list(get_connection_manager().offline_queue[session_id])
+    assert [(message["type"], message.get("agent"), message["content"]) for message in queued_messages] == [
+        ("status", "orchestrator", "analyzing_query"),
+        ("status", "orchestrator", "loading_context"),
+        ("artifact", "retrieval", "context_snippets"),
+        ("status", "orchestrator", "routing_agents"),
+        ("status", "router", "completed"),
+        ("status", "competitive_landscape_agent", "pending"),
+        ("status", "competitive_landscape_agent", "running"),
+        ("status", "competitive_landscape_agent", "completed"),
+        ("status", "synthesis", "running"),
+        ("status", "synthesis", "completed"),
+        ("final", "orchestrator", "Packaging feedback is increasingly framed as a competitive differentiator."),
+    ]
+    assert queued_messages[5]["metadata"]["trace"]["agents"][0]["status"] == "pending"
+    assert queued_messages[-1]["metadata"]["trace"]["agents"][0]["status"] == "completed"
