@@ -160,14 +160,14 @@ export function InputBar() {
   }
 
   return (
-    <div className="border-t border-gray-200 bg-white p-4">
-      <div className="mx-auto max-w-3xl">
+    <div className="p-4 bg-white border-t border-gray-200">
+      <div className="max-w-3xl mx-auto">
         {error && (
-          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div className="p-3 mb-4 text-sm text-red-700 border border-red-200 rounded bg-red-50">{error}</div>
         )}
 
         <div className="flex flex-col gap-3 md:flex-row">
-          <div className="flex bg-gray-100 rounded-lg p-1">
+          <div className="flex p-1 bg-gray-100 rounded-lg">
             <button
               onClick={() => setInputMode('text')}
               className={`px-3 py-1 rounded text-sm font-medium transition ${
@@ -207,7 +207,7 @@ export function InputBar() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleTextKeyDown}
                   placeholder="Ask about market trends, competitors, pricing..."
-                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={loading || !isConnected || !sessionId}
                 />
               </div>
@@ -224,7 +224,7 @@ export function InputBar() {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 border-2 border-dashed border-gray-300 rounded-lg py-2 text-center hover:bg-gray-50 transition"
+                  className="flex-1 py-2 text-center transition border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50"
                   type="button"
                   disabled={loading || !isConnected || !sessionId}
                 >
@@ -242,7 +242,7 @@ export function InputBar() {
                   onChange={(e) => setUrlInput(e.target.value)}
                   onKeyDown={handleUrlKeyDown}
                   placeholder="https://example.com"
-                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={loading || !isConnected || !sessionId}
                 />
               </div>
@@ -260,7 +260,7 @@ export function InputBar() {
               }
             }}
             disabled={loading || !isConnected || !sessionId}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition font-medium"
+            className="px-6 py-2 font-medium text-white transition bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
             type="button"
           >
             {loading ? '⏳' : '→'}
