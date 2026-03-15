@@ -2,6 +2,7 @@
 
 from langgraph.graph import StateGraph
 
+from agents.domain_agents.adjacent_market import adjacent_market_agent
 from agents.domain_agents.competitive_landscape import competitive_landscape_agent
 from agents.domain_agents.market_trend import market_trend_agent
 from agents.domain_agents.pricing_packaging import pricing_packaging_agent
@@ -25,6 +26,7 @@ def _route_after_router(state: OrchestrationState) -> str:
             "win_loss_agent",
             "pricing_packaging_agent",
             "positioning_messaging_agent",
+            "adjacent_market_agent",
         }:
             return agent_name
     return "synthesis"
@@ -40,6 +42,7 @@ def create_orchestrator_graph() -> StateGraph:
     graph.add_node("win_loss_agent", win_loss_agent)
     graph.add_node("pricing_packaging_agent", pricing_packaging_agent)
     graph.add_node("positioning_messaging_agent", positioning_messaging_agent)
+    graph.add_node("adjacent_market_agent", adjacent_market_agent)
     graph.add_node("synthesis", synthesis_node)
 
     graph.add_edge("__start__", "router")
@@ -52,6 +55,7 @@ def create_orchestrator_graph() -> StateGraph:
             "win_loss_agent": "win_loss_agent",
             "pricing_packaging_agent": "pricing_packaging_agent",
             "positioning_messaging_agent": "positioning_messaging_agent",
+            "adjacent_market_agent": "adjacent_market_agent",
             "synthesis": "synthesis",
         },
     )
@@ -60,6 +64,7 @@ def create_orchestrator_graph() -> StateGraph:
     graph.add_edge("win_loss_agent", "synthesis")
     graph.add_edge("pricing_packaging_agent", "synthesis")
     graph.add_edge("positioning_messaging_agent", "synthesis")
+    graph.add_edge("adjacent_market_agent", "synthesis")
     graph.add_edge("synthesis", "__end__")
 
     compiled = graph.compile()
