@@ -48,6 +48,9 @@ class BoundLogger:
     def info(self, message: str, **extra: Any) -> None:
         self._log(logging.INFO, message, **extra)
 
+    def debug(self, message: str, **extra: Any) -> None:
+        self._log(logging.DEBUG, message, **extra)
+
     def warning(self, message: str, **extra: Any) -> None:
         self._log(logging.WARNING, message, **extra)
 
@@ -60,4 +63,3 @@ class BoundLogger:
 
 def get_logger(name: str) -> BoundLogger:
     return BoundLogger(logging.getLogger(name))
-

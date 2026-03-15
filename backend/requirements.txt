@@ -5,3 +5,4 @@ pydantic-settings>=2.8,<3
 pytest>=8.3,<9
 python-dotenv>=1.0,<2
 uvicorn[standard]>=0.32,<1
+websockets>=16,<17

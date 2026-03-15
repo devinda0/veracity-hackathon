@@ -66,6 +66,8 @@ pip install -r requirements.txt
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+WebSocket chat streaming is exposed at `/api/v1/ws/chat?session_id=<session-id>`.
+
 ### Local Service Endpoints
 
 - MongoDB: `mongodb://localhost:27017`
