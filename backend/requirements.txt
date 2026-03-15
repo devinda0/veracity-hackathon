@@ -4,6 +4,7 @@ bcrypt==4.0.1
 PyJWT>=2.10,<3
 httpx>=0.28,<1
 motor>=3.7,<4
+openai>=1.70,<2
 pydantic>=2.12,<3
 pydantic-settings>=2.8,<3
 pypdf>=5.4,<6

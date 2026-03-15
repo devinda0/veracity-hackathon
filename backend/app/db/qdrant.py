@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 class QdrantClient:
     _instance: AsyncQdrantClient | None = None
 
-    EMBEDDING_DIM = 768
+    EMBEDDING_DIM = 1536
     DISTANCE = Distance.COSINE
     COLLECTIONS: dict[str, str] = {
         "business_context": "Business context documents and metadata",
@@ -29,6 +29,7 @@ class QdrantClient:
     }
     PAYLOAD_INDEXES: dict[str, PayloadSchemaType] = {
         "session_id": PayloadSchemaType.KEYWORD,
+        "source": PayloadSchemaType.KEYWORD,
         "source_type": PayloadSchemaType.KEYWORD,
         "created_at": PayloadSchemaType.INTEGER,
     }

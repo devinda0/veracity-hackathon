@@ -23,6 +23,7 @@ class FakeDatabase:
         self.business_context = FakeCollection()
         self.url_cache = FakeCollection()
         self.url_ingestions = FakeCollection()
+        self.embedding_cache = FakeCollection()
 
     async def list_collection_names(self):
         return self._existing
@@ -37,7 +38,15 @@ async def test_init_mongodb_creates_missing_collections_and_indexes() -> None:
 
     await init_mongodb(db)
 
-    assert db.created == ["sessions", "chat_history", "audit_logs", "business_context", "url_cache", "url_ingestions"]
+    assert db.created == [
+        "sessions",
+        "chat_history",
+        "audit_logs",
+        "business_context",
+        "url_cache",
+        "url_ingestions",
+        "embedding_cache",
+    ]
     assert db.users.indexes == [("email", {"unique": True})]
     assert db.sessions.indexes == [([("user_id", 1), ("created_at", -1)], {})]
     assert db.chat_history.indexes == [([("session_id", 1), ("timestamp", -1)], {})]
@@ -45,6 +54,7 @@ async def test_init_mongodb_creates_missing_collections_and_indexes() -> None:
     assert db.business_context.indexes == [([("session_id", 1), ("created_at", -1)], {})]
     assert db.url_cache.indexes == [("url_hash", {"unique": True})]
     assert db.url_ingestions.indexes == [([("user_id", 1), ("session_id", 1), ("url_hash", 1)], {"unique": True})]
+    assert db.embedding_cache.indexes == [("cache_key", {"unique": True})]
 
 
 def test_get_db_raises_when_mongo_not_initialized() -> None:

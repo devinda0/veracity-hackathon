@@ -6,7 +6,16 @@ logger = get_logger(__name__)
 
 
 async def init_mongodb(db: AsyncIOMotorDatabase) -> None:
-    collections = ["users", "sessions", "chat_history", "audit_logs", "business_context", "url_cache", "url_ingestions"]
+    collections = [
+        "users",
+        "sessions",
+        "chat_history",
+        "audit_logs",
+        "business_context",
+        "url_cache",
+        "url_ingestions",
+        "embedding_cache",
+    ]
     existing_collections = set(await db.list_collection_names())
 
     for collection_name in collections:
@@ -21,5 +30,6 @@ async def init_mongodb(db: AsyncIOMotorDatabase) -> None:
     await db.business_context.create_index([("session_id", 1), ("created_at", -1)])
     await db.url_cache.create_index("url_hash", unique=True)
     await db.url_ingestions.create_index([("user_id", 1), ("session_id", 1), ("url_hash", 1)], unique=True)
+    await db.embedding_cache.create_index("cache_key", unique=True)
 
     logger.info("mongodb_indexes_created")
