@@ -44,6 +44,16 @@ Initial monorepo scaffold for the Vector Agents platform. This issue establishes
    make down
    ```
 
+## Frontend App
+
+The frontend scaffold now lives in [frontend/package.json](/Users/devinda/VS/Veracity/frontend/package.json) and can be started independently:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 ### Local Service Endpoints
 
 - MongoDB: `mongodb://localhost:27017`
@@ -90,4 +100,3 @@ flowchart LR
 - `frontend/`, `backend/`, and `agents/` currently contain placeholders and are intentionally ready for the next milestone issues.
 - `docker-compose.prod.yml` is a minimal production override placeholder for later hardening work.
 - `.github/workflows/ci.yml` is a non-blocking skeleton until real lint and test commands exist.
-
