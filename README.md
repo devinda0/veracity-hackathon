@@ -54,6 +54,18 @@ npm install
 npm run dev
 ```
 
+## Backend App
+
+The FastAPI backend scaffold now lives in [backend/main.py](/Users/devinda/VS/Veracity/backend/main.py) and can be started independently:
+
+```bash
+cd backend
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
 ### Local Service Endpoints
 
 - MongoDB: `mongodb://localhost:27017`

@@ -1,0 +1,16 @@
+from fastapi import APIRouter
+
+from app.core.config import get_settings
+from app.routers import auth, chat, health, sessions
+
+settings = get_settings()
+
+api_router = APIRouter(prefix=settings.API_PREFIX)
+api_v1_router = APIRouter(prefix=f"/{settings.API_VERSION}")
+
+api_router.include_router(health.router, tags=["health"])
+api_v1_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_v1_router.include_router(chat.router, prefix="/chat", tags=["chat"])
+api_v1_router.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
+api_router.include_router(api_v1_router)
+
