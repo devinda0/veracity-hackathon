@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.core.config import get_settings
-from app.routers import auth, chat, documents, embedding, health, ingestion, protected, sessions, websocket
+from app.routers import auth, chat, context, documents, embedding, health, ingestion, protected, sessions, websocket
 
 settings = get_settings()
 
@@ -16,5 +16,6 @@ api_v1_router.include_router(embedding.router, prefix="/embedding", tags=["embed
 api_v1_router.include_router(ingestion.router, prefix="/ingestion", tags=["ingestion"])
 api_v1_router.include_router(protected.router, prefix="/protected", tags=["protected"])
 api_v1_router.include_router(sessions.router, prefix="/sessions", tags=["sessions"])
+api_v1_router.include_router(context.router, prefix="/sessions", tags=["context"])
 api_v1_router.include_router(websocket.router, tags=["ws"])
 api_router.include_router(api_v1_router)
