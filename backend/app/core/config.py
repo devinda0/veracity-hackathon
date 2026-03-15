@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     JWT_EXPIRATION_HOURS: int = 24
 
     MONGO_URI: str = "mongodb://localhost:27017/vector-agents"
+    MONGO_DATABASE: str = "vector-agents"
     QDRANT_URL: str = "http://localhost:6333"
     REDIS_URL: str = "redis://localhost:6379/0"
     POSTGRES_URL: str = "postgresql://postgres:postgres@localhost:5432/vector_agents"
@@ -57,4 +58,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

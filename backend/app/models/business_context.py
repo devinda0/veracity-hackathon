@@ -1,16 +1,16 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class SessionDoc(BaseModel):
+class BusinessContextDoc(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str | None = Field(default=None, alias="_id")
-    user_id: str
+    session_id: str
+    source_type: str
     title: str
-    description: str | None = None
+    content: str
+    metadata: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    is_archived: bool = False
-    message_count: int = 0

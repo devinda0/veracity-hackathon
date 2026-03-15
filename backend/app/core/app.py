@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.exceptions import APIException
 from app.core.logger import configure_logging, get_logger
+from app.db.init import init_mongodb
+from app.db.mongo import MongoDBClient
 from app.routers import api_router
 
 settings = get_settings()
@@ -18,14 +20,26 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.started_at = time.time()
+    app.state.mongo_db = None
+
     logger.info(
         "app_startup",
         app_env=settings.APP_ENV,
         api_prefix=settings.API_PREFIX,
         version=settings.API_VERSION,
     )
-    app.state.started_at = time.time()
+
+    if settings.APP_ENV != "test":
+        db = await MongoDBClient.connect(settings.MONGO_URI, settings.MONGO_DATABASE)
+        await init_mongodb(db)
+        app.state.mongo_db = db
+
     yield
+
+    if settings.APP_ENV != "test":
+        await MongoDBClient.disconnect()
+
     logger.info("app_shutdown", uptime_seconds=round(time.time() - app.state.started_at, 3))
 
 
@@ -96,4 +110,3 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONResponse:
         logger.exception("unhandled_exception", error=str(exc))
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
-
