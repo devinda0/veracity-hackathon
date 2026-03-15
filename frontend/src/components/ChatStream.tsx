@@ -2,7 +2,7 @@ import { MessageBubble } from '@/components/MessageBubble';
 import { useChat } from '@/hooks/useChat';
 
 export function ChatStream() {
-  const { messages, isStreaming } = useChat();
+  const { messages, loading } = useChat();
 
   if (messages.length === 0) {
     return (
@@ -25,7 +25,7 @@ export function ChatStream() {
         <MessageBubble key={message.id} message={message} />
       ))}
 
-      {isStreaming ? (
+      {loading ? (
         <div className="w-fit rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-sm text-accent">
           Agents are streaming updates...
         </div>
