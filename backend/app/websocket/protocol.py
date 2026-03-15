@@ -42,8 +42,14 @@ def build_message(
     ).to_payload()
 
 
-def status_message(session_id: str, agent: str, status: str) -> dict[str, Any]:
-    return build_message(MessageType.STATUS, session_id, status, agent=agent)
+def status_message(
+    session_id: str,
+    agent: str,
+    status: str,
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return build_message(MessageType.STATUS, session_id, status, agent=agent, metadata=metadata)
 
 
 def artifact_message(
@@ -84,4 +90,3 @@ def final_message(
 
 def error_message(session_id: str, error: str, *, agent: str | None = None) -> dict[str, Any]:
     return build_message(MessageType.ERROR, session_id, error, agent=agent)
-
