@@ -11,6 +11,7 @@ from app.core.exceptions import APIException
 from app.core.logger import configure_logging, get_logger
 from app.db.init import init_mongodb
 from app.db.mongo import MongoDBClient
+from app.db.qdrant import QdrantClient, init_qdrant_collections
 from app.routers import api_router
 
 settings = get_settings()
@@ -22,6 +23,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     app.state.started_at = time.time()
     app.state.mongo_db = None
+    app.state.qdrant_client = None
 
     logger.info(
         "app_startup",
@@ -34,10 +36,14 @@ async def lifespan(app: FastAPI):
         db = await MongoDBClient.connect(settings.MONGO_URI, settings.MONGO_DATABASE)
         await init_mongodb(db)
         app.state.mongo_db = db
+        qdrant_client = await QdrantClient.connect()
+        await init_qdrant_collections(qdrant_client)
+        app.state.qdrant_client = qdrant_client
 
     yield
 
     if settings.APP_ENV != "test":
+        await QdrantClient.disconnect()
         await MongoDBClient.disconnect()
 
     logger.info("app_shutdown", uptime_seconds=round(time.time() - app.state.started_at, 3))

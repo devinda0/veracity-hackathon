@@ -4,67 +4,71 @@ import { useChatStore } from '@/stores/chatStore';
 
 export function useChat() {
   const messages = useChatStore((state) => state.messages);
-  const draft = useChatStore((state) => state.draft);
-  const isStreaming = useChatStore((state) => state.isStreaming);
+  const currentQuery = useChatStore((state) => state.currentQuery);
+  const loading = useChatStore((state) => state.loading);
+  const sessionId = useChatStore((state) => state.sessionId);
   const addMessage = useChatStore((state) => state.addMessage);
-  const setDraftState = useChatStore((state) => state.setDraft);
-  const setStreaming = useChatStore((state) => state.setStreaming);
+  const setCurrentQueryState = useChatStore((state) => state.setCurrentQuery);
+  const setLoading = useChatStore((state) => state.setLoading);
 
-  const setDraft = (value: string) => {
+  const setCurrentQuery = (value: string) => {
     startTransition(() => {
-      setDraftState(value);
+      setCurrentQueryState(value);
     });
   };
 
   const submitDraft = async () => {
-    const content = draft.trim();
+    const content = currentQuery.trim();
 
     if (!content) {
       return;
     }
 
-    const timestamp = new Date().toISOString();
+    const now = new Date();
+    const ts = now.toISOString();
 
     addMessage({
-      id: `user-${timestamp}`,
+      id: `user-${ts}`,
       role: 'user',
       content,
-      timestamp,
+      timestamp: now,
     });
-    setDraftState('');
-    setStreaming(true);
+    setCurrentQueryState('');
+    setLoading(true);
 
     await new Promise((resolve) => window.setTimeout(resolve, 350));
 
     addMessage({
-      id: `assistant-${timestamp}`,
+      id: `assistant-${ts}`,
       role: 'assistant',
       content:
         'Frontend scaffold is live. API integration, streaming, and artifact hydration will connect in later milestones.',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(),
       artifacts: [
         {
-          id: `artifact-${timestamp}`,
-          kind: 'scorecard',
+          id: `artifact-${ts}`,
+          type: 'scorecard',
           title: 'Scaffold coverage',
-          rows: [
-            { label: 'Vite + React 18', value: 'ready', confidence: 'high' },
-            { label: 'Tailwind + PostCSS', value: 'ready', confidence: 'high' },
-            { label: 'Zustand stores', value: 'ready', confidence: 'high' },
-          ],
+          data: {
+            rows: [
+              { label: 'Vite + React 18', value: 'ready', confidence: 'high' },
+              { label: 'Tailwind + PostCSS', value: 'ready', confidence: 'high' },
+              { label: 'Zustand stores', value: 'ready', confidence: 'high' },
+            ],
+          },
         },
       ],
     });
 
-    setStreaming(false);
+    setLoading(false);
   };
 
   return {
-    draft,
-    isStreaming,
+    currentQuery,
+    loading,
     messages,
-    setDraft,
+    sessionId,
+    setCurrentQuery,
     submitDraft,
   };
 }
-

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    JWT_SECRET: str = "dev-secret-change-in-prod"
+    JWT_SECRET: str = "dev-secret-change-in-prod-32-bytes"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
 
