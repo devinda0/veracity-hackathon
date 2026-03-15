@@ -18,9 +18,24 @@ logger = get_logger(__name__)
 
 
 @router.websocket("/ws/chat")
-async def websocket_chat_endpoint(
+async def websocket_chat_query_endpoint(
     websocket: WebSocket,
     session_id: str = Query(..., min_length=1),
+) -> None:
+    await _websocket_chat_endpoint(websocket, session_id)
+
+
+@router.websocket("/ws/chat/{session_id}")
+async def websocket_chat_path_endpoint(
+    websocket: WebSocket,
+    session_id: str,
+) -> None:
+    await _websocket_chat_endpoint(websocket, session_id)
+
+
+async def _websocket_chat_endpoint(
+    websocket: WebSocket,
+    session_id: str,
 ) -> None:
     manager = get_connection_manager()
 
@@ -88,4 +103,3 @@ async def websocket_chat_endpoint(
         logger.error("websocket_error", session_id=session_id, error=str(exc))
         await manager.send_personal(websocket, error_message(session_id, str(exc)))
         manager.disconnect(websocket)
-
