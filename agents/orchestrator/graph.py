@@ -9,26 +9,33 @@ from agents.domain_agents.pricing_packaging import pricing_packaging_agent
 from agents.domain_agents.positioning_messaging import positioning_messaging_agent
 from agents.domain_agents.win_loss import win_loss_agent
 from agents.orchestrator.router_agent import router_node
-from agents.orchestrator.nodes import synthesis_node
+from agents.orchestrator.synthesis_agent import synthesis_agent
 from agents.orchestrator.state import OrchestrationState
 from agents.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+_IMPLEMENTED_DOMAIN_AGENTS = {
+    "market_trend_agent",
+    "competitive_landscape_agent",
+    "win_loss_agent",
+    "pricing_packaging_agent",
+    "positioning_messaging_agent",
+    "adjacent_market_agent",
+}
 
-def _route_after_router(state: OrchestrationState) -> str:
-    """Route to the first implemented agent selected by the router."""
+
+def _route_after_router(state: OrchestrationState) -> list[str] | str:
+    """Route to all selected implemented agents, otherwise directly to synthesis."""
     planned_agents = state.get("planned_agents") or []
+
+    selected: list[str] = []
     for agent_name in planned_agents:
-        if agent_name in {
-            "market_trend_agent",
-            "competitive_landscape_agent",
-            "win_loss_agent",
-            "pricing_packaging_agent",
-            "positioning_messaging_agent",
-            "adjacent_market_agent",
-        }:
-            return agent_name
+        if agent_name in _IMPLEMENTED_DOMAIN_AGENTS and agent_name not in selected:
+            selected.append(agent_name)
+
+    if selected:
+        return selected
     return "synthesis"
 
 
@@ -43,7 +50,7 @@ def create_orchestrator_graph() -> StateGraph:
     graph.add_node("pricing_packaging_agent", pricing_packaging_agent)
     graph.add_node("positioning_messaging_agent", positioning_messaging_agent)
     graph.add_node("adjacent_market_agent", adjacent_market_agent)
-    graph.add_node("synthesis", synthesis_node)
+    graph.add_node("synthesis", synthesis_agent)
 
     graph.add_edge("__start__", "router")
     graph.add_conditional_edges(
