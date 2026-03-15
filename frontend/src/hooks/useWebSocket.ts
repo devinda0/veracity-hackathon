@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { useChatStore, Message, Artifact, AgentTrace } from '../stores/chatStore'
+import type { Artifact, AgentTrace } from '../stores/chatStore'
+import { useChatStore } from '../stores/chatStore'
 import { useUiStore } from '../stores/uiStore'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -21,7 +22,7 @@ export function useWebSocket() {
   const messageQueueRef = useRef<string[]>([])
   const connectionStateRef = useRef<'connecting' | 'connected' | 'disconnected'>('disconnected')
 
-  const { sessionId, addMessage, updateMessage, addArtifact, setAgentTrace, setLoading, setError } = useChatStore()
+  const { sessionId, addMessage, addArtifact, setLoading, setError } = useChatStore()
   const { setConnectionStatus } = useUiStore()
 
   const connect = useCallback(() => {
@@ -50,7 +51,59 @@ export function useWebSocket() {
     wsRef.current.onmessage = (event) => {
       try {
         const wsMsg: WSMessage = JSON.parse(event.data)
-        handleWSMessage(wsMsg)
+        const messageId = uuidv4()
+
+        switch (wsMsg.type) {
+          case 'status':
+            // Agent status update
+            console.log(`[Agent ${wsMsg.agent}] ${wsMsg.content}`)
+            break
+
+          case 'thinking':
+            // Agent reasoning
+            addMessage({
+              id: messageId,
+              role: 'assistant',
+              content: wsMsg.content,
+              timestamp: new Date(wsMsg.timestamp),
+            })
+            break
+
+          case 'artifact': {
+            // Add artifact to last message
+            const artifact: Artifact = {
+              id: uuidv4(),
+              type: wsMsg.content,
+              title: wsMsg.metadata?.title as string,
+              data: wsMsg.metadata?.data as Record<string, unknown>,
+            }
+            const lastMsg = useChatStore.getState().messages[useChatStore.getState().messages.length - 1]
+            if (lastMsg) {
+              addArtifact(lastMsg.id, artifact)
+            }
+            break
+          }
+
+          case 'final': {
+            // Final response
+            addMessage({
+              id: messageId,
+              role: 'assistant',
+              content: wsMsg.content,
+              timestamp: new Date(wsMsg.timestamp),
+              agentTrace: wsMsg.metadata?.trace as AgentTrace,
+              tokensUsed: wsMsg.metadata?.tokens_used as number,
+              cost: wsMsg.metadata?.cost as number,
+            })
+            setLoading(false)
+            break
+          }
+
+          case 'error':
+            setError(wsMsg.content)
+            setLoading(false)
+            break
+        }
       } catch (e) {
         console.error('[WebSocket] Parse error:', e)
       }
@@ -73,62 +126,7 @@ export function useWebSocket() {
         setTimeout(connect, RECONNECT_DELAY_MS)
       }
     }
-  }, [sessionId, setConnectionStatus, setError, setLoading])
-
-  const handleWSMessage = (msg: WSMessage) => {
-    const messageId = uuidv4()
-
-    switch (msg.type) {
-      case 'status':
-        // Agent status update
-        console.log(`[Agent ${msg.agent}] ${msg.content}`)
-        break
-
-      case 'thinking':
-        // Agent reasoning
-        addMessage({
-          id: messageId,
-          role: 'assistant',
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-        })
-        break
-
-      case 'artifact':
-        // Add artifact to last message
-        const artifact: Artifact = {
-          id: uuidv4(),
-          type: msg.content,
-          title: msg.metadata?.title as string,
-          data: msg.metadata?.data as Record<string, unknown>,
-        }
-
-        const lastMsg = useChatStore.getState().messages[useChatStore.getState().messages.length - 1]
-        if (lastMsg) {
-          addArtifact(lastMsg.id, artifact)
-        }
-        break
-
-      case 'final':
-        // Final response
-        addMessage({
-          id: messageId,
-          role: 'assistant',
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-          agentTrace: msg.metadata?.trace as AgentTrace,
-          tokensUsed: msg.metadata?.tokens_used as number,
-          cost: msg.metadata?.cost as number,
-        })
-        setLoading(false)
-        break
-
-      case 'error':
-        setError(msg.content)
-        setLoading(false)
-        break
-    }
-  }
+  }, [sessionId, addMessage, addArtifact, setLoading, setError, setConnectionStatus])
 
   const send = useCallback((message: string) => {
     if (connectionStateRef.current === 'connected' && wsRef.current) {
