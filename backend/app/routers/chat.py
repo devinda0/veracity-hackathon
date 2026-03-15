@@ -71,7 +71,8 @@ async def send_message(
     db: DatabaseDep,
     current_user: CurrentUserDep,
 ) -> ChatMessageQueuedResponse:
-    session = await SessionService(db).get(request.session_id, current_user.id)
+    session_service = SessionService(db)
+    session = await session_service.get(request.session_id, current_user.id)
     if session is None:
         raise NotFoundException("Session not found")
 
@@ -96,6 +97,7 @@ async def send_message(
                 "$inc": {"message_count": 1},
             },
         )
+        await session_service.invalidate_context_cache(request.session_id)
     except Exception as exc:
         logger.error("chat_message_store_failed", session_id=request.session_id, error=str(exc))
         raise HTTPException(
