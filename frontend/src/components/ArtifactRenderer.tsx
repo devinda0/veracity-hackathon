@@ -2,6 +2,8 @@ import type { Artifact } from '@/stores/chatStore';
 
 import { ComparisonTable } from '@/components/Artifacts/ComparisonTable';
 import { Scorecard } from '@/components/Artifacts/Scorecard';
+import { Timeline } from '@/components/Artifacts/Timeline';
+import { TrendMap } from '@/components/Artifacts/TrendMap';
 import { Card } from '@/components/UI/Card';
 
 interface ArtifactRendererProps {
@@ -25,19 +27,13 @@ export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
   switch (artifact.type) {
     case 'scorecard':
       return <Scorecard artifact={artifact} />;
+    case 'trendmap':
+      return <TrendMap data={artifact.data} title={artifact.title} />;
+    case 'timeline':
+      return <Timeline data={artifact.data} title={artifact.title} />;
     case 'comparison':
     case 'comparison-table':
       return <ComparisonTable artifact={artifact} />;
-    case 'trendmap':
-    case 'heatmap':
-    case 'timeline':
-      return (
-        <Card>
-          <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{artifact.type}</p>
-          <h3 className="mt-2 text-lg font-semibold">{artifact.title}</h3>
-          <p className="mt-3 text-sm text-ink/70">This artifact view will be available in upcoming milestones.</p>
-        </Card>
-      );
     default:
       return (
         <Card>
