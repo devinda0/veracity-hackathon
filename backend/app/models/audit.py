@@ -1,16 +1,18 @@
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class SessionDoc(BaseModel):
+class AuditLogDoc(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str | None = Field(default=None, alias="_id")
     user_id: str
-    title: str
-    description: str | None = None
+    action: str
+    resource: str | None = None
+    status: str
+    details: dict[str, Any] | None = None
+    error_message: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    is_archived: bool = False
-    message_count: int = 0
+
