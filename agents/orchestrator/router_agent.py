@@ -65,9 +65,9 @@ async def router_node(state: OrchestrationState) -> dict[str, Any]:
     # Deferred import: langchain_openai may not be installed in the editor
     # environment during development. Importing at call-time avoids top-level
     # unresolved-import warnings without affecting runtime behaviour.
-    from langchain_openai import ChatOpenAI  # type: ignore[import]  # deferred: not installed in editor env
+    from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatOpenAI(model="gpt-4", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
     structured_llm = llm.with_structured_output(RouterPlan)
 
     system_prompt = (

@@ -14,11 +14,6 @@ from app.core.config import get_settings
 from app.core.logger import get_logger
 from app.db.qdrant import QdrantClient, qdrant_search, qdrant_upsert_batch
 
-try:
-    from openai import AsyncOpenAI
-except ImportError:  # pragma: no cover - exercised only when dependency is missing locally.
-    AsyncOpenAI = None
-
 logger = get_logger(__name__)
 settings = get_settings()
 
@@ -26,8 +21,8 @@ settings = get_settings()
 class EmbeddingService:
     """Embed text, cache vectors in MongoDB, and index/search Qdrant."""
 
-    EMBEDDING_MODEL = "text-embedding-3-small"
-    EMBEDDING_DIM = 1536
+    EMBEDDING_MODEL = "models/text-embedding-004"
+    EMBEDDING_DIM = 768
     EMBEDDING_BATCH_SIZE = 100
     CACHE_COLLECTION = "embedding_cache"
 
@@ -35,17 +30,10 @@ class EmbeddingService:
         self,
         db: AsyncIOMotorDatabase | None = None,
         *,
-        openai_client: Any | None = None,
         qdrant_client: AsyncQdrantClient | None = None,
     ) -> None:
         self.db = db
         self._qdrant_client = qdrant_client
-        self.openai_client = openai_client or self._build_openai_client()
-
-    def _build_openai_client(self) -> Any:
-        if AsyncOpenAI is None:
-            raise RuntimeError("The 'openai' package is required to use EmbeddingService")
-        return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     async def embed_texts(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
@@ -67,16 +55,30 @@ class EmbeddingService:
             else:
                 missing_entries.append((cache_key, text))
 
+        import asyncio
+
+        import google.generativeai as genai
+
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        loop = asyncio.get_event_loop()
+
         for start in range(0, len(missing_entries), self.EMBEDDING_BATCH_SIZE):
             batch = missing_entries[start : start + self.EMBEDDING_BATCH_SIZE]
             batch_texts = [text for _, text in batch]
-            response = await self.openai_client.embeddings.create(
-                model=self.EMBEDDING_MODEL,
-                input=batch_texts,
+
+            vectors: list[list[float]] = await loop.run_in_executor(
+                None,
+                lambda texts=batch_texts: [
+                    genai.embed_content(
+                        model=self.EMBEDDING_MODEL,
+                        content=t,
+                        task_type="RETRIEVAL_DOCUMENT",
+                    )["embedding"]
+                    for t in texts
+                ],
             )
 
-            for (cache_key, text), embedding_obj in zip(batch, response.data, strict=True):
-                vector = list(embedding_obj.embedding)
+            for (cache_key, text), vector in zip(batch, vectors, strict=True):
                 cached_vectors[cache_key] = vector
                 await self._store_cached_embedding(cache_key, text, vector)
 

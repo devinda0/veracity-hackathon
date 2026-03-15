@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     POSTGRES_URL: str = "postgresql://postgres:postgres@localhost:5432/vector_agents"
 
     OPENAI_API_KEY: str = "sk-placeholder"
+    GEMINI_API_KEY: str = ""
     FIRECRAWL_API_KEY: str = ""
     SERPAPI_API_KEY: str = ""
 

@@ -312,12 +312,12 @@ def _format_frontend_response(
 async def synthesis_agent(state: OrchestrationState) -> OrchestrationState:
     """Synthesize all domain outputs into a coherent final response."""
     try:
-        from langchain_openai import ChatOpenAI  # type: ignore[import]
+        from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
         agent_summaries = _collect_completed_agent_outputs(state)
         source_trail = _build_source_trail(agent_summaries)
 
-        llm = ChatOpenAI(model="gpt-4", temperature=0.2)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
         structured_llm = llm.with_structured_output(SynthesisOutput)
 
         synthesis_prompt = (

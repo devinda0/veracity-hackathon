@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 class QdrantClient:
     _instance: AsyncQdrantClient | None = None
 
-    EMBEDDING_DIM = 1536
+    EMBEDDING_DIM = 768
     DISTANCE = Distance.COSINE
     COLLECTIONS: dict[str, str] = {
         "business_context": "Business context documents and metadata",

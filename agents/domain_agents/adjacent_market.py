@@ -72,9 +72,9 @@ def _tool_payload(result: Any) -> dict[str, Any]:
 
 async def _run_adjacent_market_analysis(state: OrchestrationState) -> dict[str, Any]:
     """Gather adjacent-market evidence and generate scored recommendations."""
-    from langchain_openai import ChatOpenAI  # type: ignore[import]
+    from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatOpenAI(model="gpt-4", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
     structured_llm = llm.with_structured_output(AdjacentMarketAnalysis)
 
     user_query = state["user_query"]

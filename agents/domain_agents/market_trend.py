@@ -67,9 +67,9 @@ async def _run_market_trend_analysis(
 ) -> dict[str, Any]:
     """Gather inputs and return structured market trend analysis."""
     # Deferred import keeps editor diagnostics clean until dependencies are installed.
-    from langchain_openai import ChatOpenAI  # type: ignore[import]
+    from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatOpenAI(model="gpt-4", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
     structured_llm = llm.with_structured_output(MarketTrendAnalysis)
 
     trend_task = google_trends(state["user_query"])

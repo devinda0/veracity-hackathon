@@ -9,9 +9,9 @@ class OrchestratorConfig:
     """Configuration values for routing and synthesis behavior."""
 
     # Model selection
-    router_model: str = "gpt-4"
-    agent_model: str = "gpt-4"
-    synthesis_model: str = "gpt-4"
+    router_model: str = "gemini-2.0-flash"
+    agent_model: str = "gemini-2.0-flash"
+    synthesis_model: str = "gemini-2.0-flash"
 
     # Execution behavior
     max_agents: int = 6
@@ -23,6 +23,6 @@ class OrchestratorConfig:
     log_level: str = "INFO"
 
     # External dependencies
-    openai_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
     mongo_uri: Optional[str] = None
     qdrant_url: Optional[str] = None

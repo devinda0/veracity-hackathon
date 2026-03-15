@@ -3,9 +3,6 @@ services:
     image: mongo:7
     container_name: vector-agents-mongo
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-admin123}
     ports:
       - "27017:27017"
     volumes:
@@ -14,7 +11,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "mongosh --quiet -u $$MONGO_INITDB_ROOT_USERNAME -p $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\" | grep 1",
+          "mongosh --quiet --eval \"db.adminCommand('ping').ok\" | grep 1",
         ]
       interval: 10s
       timeout: 5s
@@ -27,14 +24,11 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-admin123}
     entrypoint:
       - bash
       - -lc
       - |
-        mongosh "mongodb://$$MONGO_INITDB_ROOT_USERNAME:$$MONGO_INITDB_ROOT_PASSWORD@mongo:27017/admin?authSource=admin" --eval "try { rs.status() } catch (err) { rs.initiate({_id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }]}) }"
+        mongosh "mongodb://mongo:27017/admin" --eval "try { rs.status() } catch (err) { rs.initiate({_id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }]}) }"
 
   qdrant:
     image: qdrant/qdrant:v1.13.4
@@ -59,7 +53,7 @@ services:
     image: redis:7-alpine
     container_name: vector-agents-redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
@@ -78,7 +72,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
