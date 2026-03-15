@@ -1,0 +1,13 @@
+services:
+  mongo:
+    restart: unless-stopped
+
+  qdrant:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  postgres:
+    restart: unless-stopped
+

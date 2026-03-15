@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Backend lint placeholder
+        run: |
+          if [ -f backend/Makefile ]; then
+            make -C backend lint
+          else
+            echo "backend lint placeholder"
+          fi
+
+      - name: Frontend lint placeholder
+        run: |
+          if [ -f frontend/package.json ]; then
+            echo "frontend package detected; wire npm install + lint in issue #2"
+          else
+            echo "frontend lint placeholder"
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Backend test placeholder
+        run: |
+          if [ -f backend/Makefile ]; then
+            make -C backend test
+          else
+            echo "backend test placeholder"
+          fi
+
+      - name: Frontend test placeholder
+        run: |
+          if [ -f frontend/package.json ]; then
+            echo "frontend package detected; wire npm test in a later issue"
+          else
+            echo "frontend test placeholder"
+          fi
+
