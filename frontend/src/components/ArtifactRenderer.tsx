@@ -22,10 +22,29 @@ export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
     );
   }
 
-  if (artifact.type === 'scorecard') {
-    return <Scorecard artifact={artifact} />;
+  switch (artifact.type) {
+    case 'scorecard':
+      return <Scorecard artifact={artifact} />;
+    case 'comparison':
+    case 'comparison-table':
+      return <ComparisonTable artifact={artifact} />;
+    case 'trendmap':
+    case 'heatmap':
+    case 'timeline':
+      return (
+        <Card>
+          <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{artifact.type}</p>
+          <h3 className="mt-2 text-lg font-semibold">{artifact.title}</h3>
+          <p className="mt-3 text-sm text-ink/70">This artifact view will be available in upcoming milestones.</p>
+        </Card>
+      );
+    default:
+      return (
+        <Card>
+          <p className="text-xs uppercase tracking-[0.22em] text-ink/45">Unknown artifact</p>
+          <p className="mt-2 text-sm text-ink/70">Unknown artifact type: {artifact.type}</p>
+        </Card>
+      );
   }
-
-  return <ComparisonTable artifact={artifact} />;
 }
 
