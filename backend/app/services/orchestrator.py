@@ -20,16 +20,25 @@ logger = get_logger(__name__)
 class OrchestratorService:
     """Bridge chat requests to the agent graph with a safe local fallback."""
 
+    _EXECUTABLE_GRAPH_AGENTS = (
+        "market_trend_agent",
+        "competitive_landscape_agent",
+    )
+
     def __init__(
         self,
         db: AsyncIOMotorDatabase,
         *,
         manager: ConnectionManager | None = None,
+        redis_client: Any | None = None,
         embedding_service_cls: type[EmbeddingService] = EmbeddingService,
+        session_service_cls: type[SessionService] = SessionService,
     ) -> None:
         self.db = db
         self.manager = manager or get_connection_manager()
+        self.redis_client = redis_client
         self.embedding_service_cls = embedding_service_cls
+        self.session_service_cls = session_service_cls
         self._graph: Any | None = None
 
     async def run(
@@ -41,13 +50,29 @@ class OrchestratorService:
         business_context: str | None = None,
         timeout_seconds: int = 30,
     ) -> dict[str, Any]:
-        session, history = await SessionService(self.db).get_with_history(session_id, user_id)
+        session_service = self.session_service_cls(
+            self.db,
+            redis_client=self.redis_client,
+            embedding_service_cls=self.embedding_service_cls,
+        )
+        session = await session_service.get(session_id, user_id)
         if session is None:
             raise ValueError("Session not found")
 
+        session_context = await session_service.get_session_context(
+            session_id=session_id,
+            user_id=user_id,
+            query=query,
+        )
+
         await self.manager.broadcast(
             session_id,
-            status_message(session_id, "orchestrator", "analyzing_query"),
+            status_message(
+                session_id,
+                "orchestrator",
+                "analyzing_query",
+                metadata={"query": query},
+            ),
         )
 
         try:
@@ -57,7 +82,7 @@ class OrchestratorService:
                     user_id=user_id,
                     query=query,
                     business_context=business_context,
-                    history=history,
+                    session_context=session_context,
                 ),
                 timeout=timeout_seconds,
             )
@@ -97,6 +122,7 @@ class OrchestratorService:
                 "$inc": {"message_count": 1},
             },
         )
+        await session_service.invalidate_context_cache(session_id)
 
         await self.manager.broadcast(
             session_id,
@@ -131,13 +157,13 @@ class OrchestratorService:
         user_id: str,
         query: str,
         business_context: str | None,
-        history: list[dict[str, Any]],
+        session_context: dict[str, Any],
     ) -> dict[str, Any]:
         await self.manager.broadcast(
             session_id,
             status_message(session_id, "orchestrator", "loading_context"),
         )
-        context_docs = await self._load_context(query=query, session_id=session_id)
+        context_docs = session_context.get("business_context", {}).get("relevant_chunks", [])
 
         artifacts = self._build_context_artifacts(context_docs)
         for artifact in artifacts:
@@ -154,17 +180,12 @@ class OrchestratorService:
                 ),
             )
 
-        await self.manager.broadcast(
-            session_id,
-            status_message(session_id, "orchestrator", "synthesizing"),
-        )
-
         graph_state = await self._run_graph(
             session_id=session_id,
             user_id=user_id,
             query=query,
             business_context=business_context,
-            history=history,
+            session_context=session_context,
             context_docs=context_docs,
         )
 
@@ -190,15 +211,6 @@ class OrchestratorService:
             "cost": self._coerce_float(graph_state.get("cost_estimate")),
         }
 
-    async def _load_context(self, *, query: str, session_id: str) -> list[dict[str, Any]]:
-        try:
-            service = self.embedding_service_cls(db=self.db)
-            results = await service.search(query=query, session_id=session_id, limit=3)
-            return [result for result in results if isinstance(result, dict)]
-        except Exception as exc:
-            logger.warning("orchestrator_context_unavailable", session_id=session_id, error=str(exc))
-            return []
-
     async def _run_graph(
         self,
         *,
@@ -206,49 +218,187 @@ class OrchestratorService:
         user_id: str,
         query: str,
         business_context: str | None,
-        history: list[dict[str, Any]],
+        session_context: dict[str, Any],
         context_docs: list[dict[str, Any]],
     ) -> dict[str, Any]:
         initial_state = {
             "user_query": query,
             "user_id": user_id,
             "session_id": session_id,
-            "business_context": business_context or self._summarize_context(context_docs),
-            "conversation_history": [
-                {
-                    "role": message.get("role", "assistant"),
-                    "content": message.get("content", ""),
-                    "timestamp": message.get("timestamp").isoformat()
-                    if hasattr(message.get("timestamp"), "isoformat")
-                    else message.get("timestamp"),
-                }
-                for message in history[-10:]
-            ],
+            "business_context": self._merge_business_context(
+                business_context,
+                session_context.get("formatted_context"),
+                context_docs,
+            ),
+            "conversation_history": list(session_context.get("conversation_history", [])[-10:]),
             "planned_agents": [],
             "current_agent": None,
             "agent_outputs": {},
             "synthesis_result": None,
             "artifacts": [],
             "start_time": datetime.now(UTC).timestamp(),
-            "trace_data": {"context_results": len(context_docs)},
+            "trace_data": {
+                "context_results": len(context_docs),
+                "history_messages": len(session_context.get("conversation_history", [])),
+                "recent_insights": len(session_context.get("recent_insights", [])),
+                "agent_statuses": {},
+            },
             "tokens_used": 0,
             "cost_estimate": 0.0,
         }
 
         graph = await self._get_graph()
         if graph is None:
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    "orchestrator",
+                    "synthesizing",
+                    metadata=self._status_metadata(initial_state),
+                ),
+            )
             return initial_state
 
         try:
-            if hasattr(graph, "ainvoke"):
-                result = await graph.ainvoke(initial_state)
+            if hasattr(graph, "astream"):
+                result = await self._stream_graph_updates(graph, initial_state)
+            elif hasattr(graph, "ainvoke"):
+                result = await self._invoke_graph(graph, initial_state)
             else:
+                await self.manager.broadcast(
+                    session_id,
+                    status_message(
+                        session_id,
+                        "orchestrator",
+                        "synthesizing",
+                        metadata=self._status_metadata(initial_state),
+                    ),
+                )
                 result = await asyncio.to_thread(graph.invoke, initial_state)
+                if isinstance(result, dict):
+                    await self._emit_graph_summary_statuses(result)
         except Exception as exc:
             logger.warning("orchestrator_graph_failed", session_id=session_id, error=str(exc))
             return initial_state
 
         return result if isinstance(result, dict) else initial_state
+
+    async def _stream_graph_updates(
+        self,
+        graph: Any,
+        initial_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        session_id = initial_state["session_id"]
+        final_state = dict(initial_state)
+        synthesis_started = False
+
+        await self.manager.broadcast(
+            session_id,
+            status_message(
+                session_id,
+                "orchestrator",
+                "routing_agents",
+                metadata=self._status_metadata(final_state),
+            ),
+        )
+
+        try:
+            stream = graph.astream(initial_state, stream_mode="updates")
+        except TypeError as exc:
+            logger.warning("orchestrator_graph_stream_mode_unsupported", error=str(exc))
+            return await self._invoke_graph(graph, initial_state)
+
+        async for chunk in stream:
+            if not isinstance(chunk, dict):
+                continue
+
+            for node_name, update in chunk.items():
+                if not isinstance(update, dict):
+                    continue
+
+                final_state = self._merge_state(final_state, update)
+
+                if node_name == "router":
+                    await self._broadcast_router_status(final_state)
+                    continue
+
+                if node_name in self._EXECUTABLE_GRAPH_AGENTS:
+                    await self._broadcast_agent_completion(final_state, node_name)
+                    if not synthesis_started:
+                        await self.manager.broadcast(
+                            session_id,
+                            status_message(
+                                session_id,
+                                "synthesis",
+                                "running",
+                                metadata=self._status_metadata(final_state),
+                            ),
+                        )
+                        synthesis_started = True
+                    continue
+
+                if node_name == "synthesis":
+                    if not synthesis_started:
+                        await self.manager.broadcast(
+                            session_id,
+                            status_message(
+                                session_id,
+                                "synthesis",
+                                "running",
+                                metadata=self._status_metadata(final_state),
+                            ),
+                        )
+                    await self.manager.broadcast(
+                        session_id,
+                        status_message(
+                            session_id,
+                            "synthesis",
+                            "completed",
+                            metadata=self._status_metadata(final_state),
+                        ),
+                    )
+                    synthesis_started = True
+
+        if not synthesis_started:
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    "synthesis",
+                    "completed",
+                    metadata=self._status_metadata(final_state),
+                ),
+            )
+
+        return final_state
+
+    async def _invoke_graph(
+        self,
+        graph: Any,
+        initial_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        session_id = initial_state["session_id"]
+        await self.manager.broadcast(
+            session_id,
+            status_message(
+                session_id,
+                "orchestrator",
+                "synthesizing",
+                metadata=self._status_metadata(initial_state),
+            ),
+        )
+
+        if hasattr(graph, "ainvoke"):
+            result = await graph.ainvoke(initial_state)
+        else:
+            result = await asyncio.to_thread(graph.invoke, initial_state)
+
+        if isinstance(result, dict):
+            await self._emit_graph_summary_statuses(result)
+            return result
+
+        return initial_state
 
     async def _get_graph(self) -> Any | None:
         if self._graph is not None:
@@ -300,7 +450,10 @@ class OrchestratorService:
         else:
             trace = {}
 
+        trace.pop("agent_statuses", None)
         trace.setdefault("planned_agents", graph_state.get("planned_agents") or [])
+        trace["agents"] = self._extract_agent_trace(graph_state)
+        trace["duration_ms"] = self._compute_duration_ms(graph_state.get("start_time"))
         trace.setdefault("context_results", len(context_docs))
         trace.setdefault(
             "mode",
@@ -345,6 +498,315 @@ class OrchestratorService:
         if not snippets:
             return None
         return "\n".join(f"- {snippet}" for snippet in snippets[:3])
+
+    def _merge_business_context(
+        self,
+        business_context: str | None,
+        formatted_session_context: str | None,
+        context_docs: list[dict[str, Any]],
+    ) -> str | None:
+        parts: list[str] = []
+
+        if business_context:
+            parts.append(f"User-provided business context:\n{business_context.strip()}")
+        if formatted_session_context:
+            parts.append(f"Session memory:\n{formatted_session_context.strip()}")
+
+        merged_context = "\n\n".join(parts).strip()
+        if merged_context:
+            return merged_context
+
+        return self._summarize_context(context_docs)
+
+    async def _broadcast_router_status(self, graph_state: dict[str, Any]) -> None:
+        session_id = graph_state["session_id"]
+        planned_agents = graph_state.get("planned_agents") or []
+        executable_agents = self._select_executable_agents(planned_agents)
+
+        await self.manager.broadcast(
+            session_id,
+            status_message(
+                session_id,
+                "router",
+                "completed",
+                metadata={
+                    "planned_agents": planned_agents,
+                    "trace": self._status_metadata(graph_state)["trace"],
+                },
+            ),
+        )
+
+        for agent_name in executable_agents:
+            self._update_agent_trace(graph_state, agent_name, "pending")
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    agent_name,
+                    "pending",
+                    metadata=self._status_metadata(graph_state),
+                ),
+            )
+
+        if executable_agents:
+            current_agent = executable_agents[0]
+            graph_state["current_agent"] = current_agent
+            self._update_agent_trace(graph_state, current_agent, "running")
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    current_agent,
+                    "running",
+                    metadata=self._status_metadata(graph_state),
+                ),
+            )
+
+    async def _broadcast_agent_completion(
+        self,
+        graph_state: dict[str, Any],
+        agent_name: str,
+    ) -> None:
+        output = (graph_state.get("agent_outputs") or {}).get(agent_name) or {}
+        status = output.get("status")
+        if status not in {"pending", "running", "completed", "failed"}:
+            status = "completed"
+
+        self._update_agent_trace(
+            graph_state,
+            agent_name,
+            status,
+            error=output.get("error"),
+            result=output.get("result"),
+        )
+        graph_state["current_agent"] = agent_name
+        await self.manager.broadcast(
+            graph_state["session_id"],
+            status_message(
+                graph_state["session_id"],
+                agent_name,
+                status,
+                metadata=self._status_metadata(graph_state),
+            ),
+        )
+
+    async def _emit_graph_summary_statuses(self, graph_state: dict[str, Any]) -> None:
+        session_id = graph_state["session_id"]
+        planned_agents = graph_state.get("planned_agents") or []
+        executable_agents = self._select_executable_agents(planned_agents)
+
+        if planned_agents:
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    "router",
+                    "completed",
+                    metadata={
+                        "planned_agents": planned_agents,
+                        "trace": self._status_metadata(graph_state)["trace"],
+                    },
+                ),
+            )
+
+        for agent_name in executable_agents:
+            self._update_agent_trace(graph_state, agent_name, "pending")
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    agent_name,
+                    "pending",
+                    metadata=self._status_metadata(graph_state),
+                ),
+            )
+            self._update_agent_trace(graph_state, agent_name, "running")
+            await self.manager.broadcast(
+                session_id,
+                status_message(
+                    session_id,
+                    agent_name,
+                    "running",
+                    metadata=self._status_metadata(graph_state),
+                ),
+            )
+            await self._broadcast_agent_completion(graph_state, agent_name)
+
+        await self.manager.broadcast(
+            session_id,
+            status_message(
+                session_id,
+                "synthesis",
+                "running",
+                metadata=self._status_metadata(graph_state),
+            ),
+        )
+        await self.manager.broadcast(
+            session_id,
+            status_message(
+                session_id,
+                "synthesis",
+                "completed",
+                metadata=self._status_metadata(graph_state),
+            ),
+        )
+
+    def _status_metadata(self, graph_state: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "trace": self._build_live_trace(graph_state),
+            "current_agent": graph_state.get("current_agent"),
+        }
+
+    def _build_live_trace(self, graph_state: dict[str, Any]) -> dict[str, Any]:
+        trace_data = graph_state.get("trace_data")
+        if isinstance(trace_data, dict):
+            trace = dict(trace_data)
+        else:
+            trace = {}
+
+        trace.pop("agent_statuses", None)
+        trace["planned_agents"] = graph_state.get("planned_agents") or []
+        trace["agents"] = self._extract_agent_trace(graph_state)
+        trace["duration_ms"] = self._compute_duration_ms(graph_state.get("start_time"))
+        return trace
+
+    def _extract_agent_trace(self, graph_state: dict[str, Any]) -> list[dict[str, Any]]:
+        trace_data = graph_state.get("trace_data")
+        tracked_agents = {}
+        if isinstance(trace_data, dict):
+            tracked = trace_data.get("agent_statuses")
+            if isinstance(tracked, dict):
+                tracked_agents = tracked
+
+        ordered_names: list[str] = []
+        for agent_name in graph_state.get("planned_agents") or []:
+            if agent_name in tracked_agents and agent_name not in ordered_names:
+                ordered_names.append(agent_name)
+
+        for agent_name in tracked_agents:
+            if agent_name not in ordered_names:
+                ordered_names.append(agent_name)
+
+        agent_outputs = graph_state.get("agent_outputs") or {}
+        for agent_name in agent_outputs:
+            if agent_name not in ordered_names:
+                ordered_names.append(agent_name)
+
+        agents: list[dict[str, Any]] = []
+        for agent_name in ordered_names:
+            if agent_name in tracked_agents:
+                tracked = tracked_agents[agent_name]
+                agents.append(
+                    {
+                        "name": agent_name,
+                        "status": tracked.get("status", "pending"),
+                        "error": tracked.get("error"),
+                        "result": tracked.get("result"),
+                        "duration_ms": tracked.get("duration_ms"),
+                    }
+                )
+                continue
+
+            output = agent_outputs.get(agent_name)
+            if not isinstance(output, dict):
+                continue
+
+            agents.append(
+                {
+                    "name": agent_name,
+                    "status": output.get("status", "pending"),
+                    "error": output.get("error"),
+                    "result": self._summarize_agent_result(output.get("result")),
+                    "duration_ms": None,
+                }
+            )
+
+        return agents
+
+    def _update_agent_trace(
+        self,
+        graph_state: dict[str, Any],
+        agent_name: str,
+        status: str,
+        *,
+        error: str | None = None,
+        result: Any = None,
+    ) -> None:
+        trace_data = graph_state.setdefault("trace_data", {})
+        tracked_agents = trace_data.setdefault("agent_statuses", {})
+        tracked = dict(tracked_agents.get(agent_name) or {})
+        now = datetime.now(UTC).timestamp()
+
+        tracked["name"] = agent_name
+        tracked["status"] = status
+
+        if status == "running":
+            tracked.setdefault("started_at", now)
+        if status in {"completed", "failed"}:
+            tracked.setdefault("started_at", now)
+            tracked["completed_at"] = now
+            tracked["duration_ms"] = max(int((now - tracked["started_at"]) * 1000), 0)
+
+        if error:
+            tracked["error"] = error
+        if result is not None:
+            tracked["result"] = self._summarize_agent_result(result)
+
+        tracked_agents[agent_name] = tracked
+
+    def _summarize_agent_result(self, result: Any) -> dict[str, Any] | None:
+        if not isinstance(result, dict):
+            return None
+
+        analysis = result.get("analysis")
+        if isinstance(analysis, dict):
+            summary = analysis.get("summary")
+            confidence_score = analysis.get("confidence_score")
+            payload = {
+                key: value
+                for key, value in {
+                    "summary": summary,
+                    "confidence_score": confidence_score,
+                }.items()
+                if value not in (None, "", [])
+            }
+            if payload:
+                return payload
+
+        summary = result.get("summary")
+        if isinstance(summary, str) and summary.strip():
+            return {"summary": summary.strip()}
+
+        return None
+
+    def _select_executable_agents(self, planned_agents: list[str]) -> list[str]:
+        for agent_name in planned_agents:
+            if agent_name in self._EXECUTABLE_GRAPH_AGENTS:
+                return [agent_name]
+        return []
+
+    def _merge_state(
+        self,
+        current_state: dict[str, Any],
+        update: dict[str, Any],
+    ) -> dict[str, Any]:
+        merged = dict(current_state)
+        for key, value in update.items():
+            existing = merged.get(key)
+            if isinstance(existing, dict) and isinstance(value, dict):
+                merged[key] = {**existing, **value}
+            else:
+                merged[key] = value
+        return merged
+
+    @staticmethod
+    def _compute_duration_ms(start_time: Any) -> int | None:
+        if start_time is None:
+            return None
+        try:
+            return max(int((datetime.now(UTC).timestamp() - float(start_time)) * 1000), 0)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _coerce_int(value: Any) -> int | None:

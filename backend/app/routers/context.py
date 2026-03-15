@@ -126,6 +126,7 @@ async def upload_context(
 
         result = await db.business_context.insert_one(document)
         context_id = str(result.inserted_id)
+        await SessionService(db).invalidate_context_cache(session_id)
 
         logger.info(
             "session_context_document_uploaded",
@@ -247,6 +248,7 @@ async def ingest_context_url(
             },
             upsert=True,
         )
+        await SessionService(db).invalidate_context_cache(session_id)
 
         logger.info(
             "session_context_url_ingested",
@@ -327,6 +329,7 @@ async def add_text_context(
 
         result = await db.business_context.insert_one(context_doc)
         context_id = str(result.inserted_id)
+        await SessionService(db).invalidate_context_cache(session_id)
 
         logger.info(
             "session_context_text_added",
