@@ -1,4 +1,4 @@
-import type { Artifact } from '@/types';
+import type { Artifact } from '@/stores/chatStore';
 
 import { ComparisonTable } from '@/components/Artifacts/ComparisonTable';
 import { Scorecard } from '@/components/Artifacts/Scorecard';
@@ -22,7 +22,7 @@ export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
     );
   }
 
-  if (artifact.kind === 'scorecard') {
+  if (artifact.type === 'scorecard') {
     return <Scorecard artifact={artifact} />;
   }
 

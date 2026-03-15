@@ -1,15 +1,23 @@
-import type { Artifact } from '@/types';
+import type { Artifact } from '@/stores/chatStore';
 
 import { Card } from '@/components/UI/Card';
+
+interface ComparisonRow {
+  label: string;
+  value: string;
+  confidence?: string;
+}
 
 interface ComparisonTableProps {
   artifact: Artifact;
 }
 
 export function ComparisonTable({ artifact }: ComparisonTableProps) {
+  const rows = (artifact.data?.rows ?? []) as ComparisonRow[];
+
   return (
     <Card>
-      <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{artifact.kind}</p>
+      <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{artifact.type}</p>
       <h3 className="mt-2 text-lg font-semibold">{artifact.title}</h3>
       <div className="mt-4 overflow-hidden rounded-[20px] border border-ink/8">
         <table className="min-w-full border-collapse text-left text-sm">
@@ -21,7 +29,7 @@ export function ComparisonTable({ artifact }: ComparisonTableProps) {
             </tr>
           </thead>
           <tbody className="bg-white/75">
-            {artifact.rows?.map((row) => (
+            {rows.map((row) => (
               <tr className="border-t border-ink/8" key={row.label}>
                 <td className="px-4 py-3">{row.label}</td>
                 <td className="px-4 py-3">{row.value}</td>

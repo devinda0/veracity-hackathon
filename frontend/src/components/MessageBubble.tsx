@@ -1,4 +1,4 @@
-import type { Message } from '@/types';
+import type { Message } from '@/stores/chatStore';
 
 import { ArtifactRenderer } from '@/components/ArtifactRenderer';
 
@@ -20,7 +20,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       >
         <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] opacity-65">
           <span>{message.role}</span>
-          <span>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span>{message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
 
