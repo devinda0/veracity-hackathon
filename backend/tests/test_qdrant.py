@@ -85,7 +85,7 @@ class FakeQdrantClient:
         )
 
 
-def make_collection_info(size: int = 768, distance: Distance = Distance.COSINE) -> CollectionInfo:
+def make_collection_info(size: int = 1536, distance: Distance = Distance.COSINE) -> CollectionInfo:
     return CollectionInfo(
         status="green",
         optimizer_status="ok",
@@ -139,9 +139,11 @@ async def test_init_qdrant_creates_missing_collections_and_indexes() -> None:
 
     assert client.payload_indexes == [
         ("business_context", "session_id", PayloadSchemaType.KEYWORD),
+        ("business_context", "source", PayloadSchemaType.KEYWORD),
         ("business_context", "source_type", PayloadSchemaType.KEYWORD),
         ("business_context", "created_at", PayloadSchemaType.INTEGER),
         ("research_cache", "session_id", PayloadSchemaType.KEYWORD),
+        ("research_cache", "source", PayloadSchemaType.KEYWORD),
         ("research_cache", "source_type", PayloadSchemaType.KEYWORD),
         ("research_cache", "created_at", PayloadSchemaType.INTEGER),
     ]
@@ -154,7 +156,7 @@ async def test_init_qdrant_raises_on_collection_config_conflict() -> None:
         collection_infos={"business_context": make_collection_info(size=512)},
     )
 
-    with pytest.raises(RuntimeError, match="expected 768"):
+    with pytest.raises(RuntimeError, match="expected 1536"):
         await init_qdrant_collections(client)
 
 
