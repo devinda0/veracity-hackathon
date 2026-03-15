@@ -7,17 +7,20 @@ import { SessionSidebar } from '@/components/SessionSidebar';
 import { Card } from '@/components/UI/Card';
 import { useChat } from '@/hooks/useChat';
 import { useSession } from '@/hooks/useSession';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { useUiStore } from '@/stores/uiStore';
 
 export default function App() {
   const { messages } = useChat();
-  const { sessions, activeSessionId, ensureSeedData } = useSession();
+  const { sessions, activeSessionId, loadSessions } = useSession();
   const activePanel = useUiStore((state) => state.activePanel);
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
+  const connectionStatus = useUiStore((state) => state.connectionStatus);
+  useWebSocket();
 
   useEffect(() => {
-    ensureSeedData();
-  }, [ensureSeedData]);
+    void loadSessions();
+  }, [loadSessions]);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
   const flattenedArtifacts = messages.flatMap((message) => message.artifacts ?? []);
@@ -49,10 +52,19 @@ export default function App() {
           <section className="flex min-h-[70vh] flex-col gap-4">
             <Card className="flex-1 overflow-hidden">
               <div className="border-b border-ink/10 px-5 py-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-ink/45">Active session</p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs uppercase tracking-[0.22em] text-ink/45">Active session</p>
+                  <div className="rounded-full border border-ink/10 bg-white/75 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-ink/55">
+                    WS {connectionStatus}
+                  </div>
+                </div>
                 <h1 className="mt-1 text-xl font-semibold">
                   {activeSession?.title ?? 'New intelligence workspace'}
                 </h1>
+                <p className="mt-2 text-sm text-ink/60">
+                  {activeSession?.description ??
+                    'Choose a session from the sidebar or create a new research thread.'}
+                </p>
               </div>
               <ChatStream />
             </Card>

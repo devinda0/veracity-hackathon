@@ -4,7 +4,7 @@ import { Button } from '@/components/UI/Button';
 import { useChat } from '@/hooks/useChat';
 
 export function InputBar() {
-  const { currentQuery, setCurrentQuery, submitDraft, loading } = useChat();
+  const { currentQuery, setCurrentQuery, submitDraft, loading, sessionId } = useChat();
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -20,7 +20,12 @@ export function InputBar() {
           </span>
           <textarea
             className="min-h-28 w-full resize-none rounded-[22px] border border-ink/10 bg-white/75 px-4 py-3 text-sm outline-none transition focus:border-spruce focus:ring-2 focus:ring-spruce/15"
-            placeholder="Summarize market shifts in AI-native vector databases over the last 12 months."
+            placeholder={
+              sessionId
+                ? 'Summarize market shifts in AI-native vector databases over the last 12 months.'
+                : 'Create or select a session to start a research thread.'
+            }
+            disabled={!sessionId}
             value={currentQuery}
             onChange={(event) => setCurrentQuery(event.target.value)}
           />
@@ -30,7 +35,7 @@ export function InputBar() {
           <div className="hidden rounded-full border border-ink/10 bg-white/65 px-4 py-2 text-xs uppercase tracking-[0.24em] text-ink/50 lg:block">
             WebSocket-ready shell
           </div>
-          <Button disabled={!currentQuery.trim() || loading} type="submit">
+          <Button disabled={!sessionId || !currentQuery.trim() || loading} type="submit">
             {loading ? 'Streaming...' : 'Send prompt'}
           </Button>
         </div>

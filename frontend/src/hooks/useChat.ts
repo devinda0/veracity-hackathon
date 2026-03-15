@@ -6,6 +6,7 @@ export function useChat() {
   const messages = useChatStore((state) => state.messages);
   const currentQuery = useChatStore((state) => state.currentQuery);
   const loading = useChatStore((state) => state.loading);
+  const sessionId = useChatStore((state) => state.sessionId);
   const addMessage = useChatStore((state) => state.addMessage);
   const setCurrentQueryState = useChatStore((state) => state.setCurrentQuery);
   const setLoading = useChatStore((state) => state.setLoading);
@@ -66,8 +67,8 @@ export function useChat() {
     currentQuery,
     loading,
     messages,
+    sessionId,
     setCurrentQuery,
     submitDraft,
   };
 }
-
