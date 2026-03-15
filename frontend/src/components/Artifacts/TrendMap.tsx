@@ -1,5 +1,3 @@
-import { Card } from '@/components/UI/Card';
-
 import {
   Area,
   CartesianGrid,
@@ -12,91 +10,102 @@ import {
   YAxis,
 } from 'recharts';
 
-interface TrendEvent {
-  date: string;
-  trend?: number;
-  confidence?: number;
-}
-
-interface TrendMapProps {
-  data: unknown;
-  title: string;
-}
+import type { Artifact } from '@/stores/chatStore';
+import { Card } from '@/components/UI/Card';
 
 interface TrendPoint {
   date: string;
   trend: number;
   confidence: number;
-  confidenceUpper: number;
-  confidenceLower: number;
+  upper: number;
+  lower: number;
 }
 
-export function TrendMap({ data, title }: TrendMapProps) {
-  const events = ((data as { events?: TrendEvent[] })?.events ?? []) as TrendEvent[];
+interface TrendMapData {
+  events?: Array<{
+    date?: string;
+    trend?: number;
+    confidence?: number;
+  }>;
+}
 
-  const chartData: TrendPoint[] = events.map((event, index) => {
-    const trendValue = typeof event.trend === 'number' ? event.trend : Math.min(100, 45 + index * 9);
-    const confidenceValue = typeof event.confidence === 'number' ? event.confidence : 65;
-    const band = Math.max(5, (100 - confidenceValue) / 2);
+interface TrendMapProps {
+  artifact: Artifact;
+}
 
+export function TrendMap({ artifact }: TrendMapProps) {
+  const data = (artifact.data ?? {}) as TrendMapData;
+
+  const chartData: TrendPoint[] = (data.events ?? []).map((e) => {
+    const conf = e.confidence ?? 0;
+    const trend = e.trend ?? conf;
     return {
-      date: event.date,
-      trend: Math.max(0, Math.min(100, trendValue)),
-      confidence: Math.max(0, Math.min(100, confidenceValue)),
-      confidenceUpper: Math.max(0, Math.min(100, trendValue + band)),
-      confidenceLower: Math.max(0, Math.min(100, trendValue - band)),
+      date: e.date ?? '',
+      trend,
+      confidence: conf,
+      upper: Math.min(100, conf + 10),
+      lower: Math.max(0, conf - 10),
     };
   });
 
   return (
     <Card>
-      <p className="text-xs uppercase tracking-[0.22em] text-ink/45">Trendmap</p>
-      <h3 className="mt-2 text-lg font-semibold">{title}</h3>
+      <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{artifact.type}</p>
+      <h3 className="mt-2 text-lg font-semibold">{artifact.title}</h3>
 
       {chartData.length > 0 ? (
-        <div className="mt-4 h-[320px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 12, left: -12, bottom: 8 }}>
+        <div className="mt-4">
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 12 }} />
-              <YAxis domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 12 }} />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
               <Tooltip
-                contentStyle={{ borderRadius: '12px', border: '1px solid #e5e7eb' }}
+                contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
               />
               <Legend />
+              {/* Confidence band */}
               <Area
                 type="monotone"
-                dataKey="confidenceUpper"
+                dataKey="upper"
                 stroke="none"
                 fill="#93c5fd"
-                fillOpacity={0.28}
-                name="Confidence Band (Upper)"
+                fillOpacity={0.3}
+                name="Confidence upper"
+                legendType="none"
               />
               <Area
                 type="monotone"
-                dataKey="confidenceLower"
+                dataKey="lower"
                 stroke="none"
                 fill="#ffffff"
                 fillOpacity={1}
-                name="Confidence Band (Lower)"
+                name="Confidence lower"
+                legendType="none"
               />
-              <Line type="monotone" dataKey="trend" stroke="#3b82f6" strokeWidth={2.5} name="Trend" dot={false} />
+              {/* Lines */}
+              <Line
+                type="monotone"
+                dataKey="trend"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={false}
+                name="Trend"
+              />
               <Line
                 type="monotone"
                 dataKey="confidence"
                 stroke="#10b981"
-                strokeWidth={2}
-                strokeDasharray="5 3"
-                name="Confidence"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
                 dot={false}
+                name="Confidence"
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="mt-4 rounded-[16px] border border-ink/8 bg-white/75 py-10 text-center text-sm text-ink/55">
-          No trend data available
-        </div>
+        <p className="mt-6 py-8 text-center text-sm text-ink/50">No trend data available</p>
       )}
     </Card>
   );

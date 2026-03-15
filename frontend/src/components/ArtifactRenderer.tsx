@@ -1,6 +1,7 @@
 import type { Artifact } from '@/stores/chatStore';
 
 import { ComparisonTable } from '@/components/Artifacts/ComparisonTable';
+import { HeatMap } from '@/components/Artifacts/HeatMap';
 import { Scorecard } from '@/components/Artifacts/Scorecard';
 import { Timeline } from '@/components/Artifacts/Timeline';
 import { TrendMap } from '@/components/Artifacts/TrendMap';
@@ -27,18 +28,30 @@ export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
   switch (artifact.type) {
     case 'scorecard':
       return <Scorecard artifact={artifact} />;
+
     case 'trendmap':
-      return <TrendMap data={artifact.data} title={artifact.title} />;
+    case 'trend-map':
+      return <TrendMap artifact={artifact} />;
+
     case 'timeline':
-      return <Timeline data={artifact.data} title={artifact.title} />;
+      return <Timeline artifact={artifact} />;
+
+    case 'heatmap':
+    case 'heat-map':
+      return <HeatMap artifact={artifact} />;
+
     case 'comparison':
     case 'comparison-table':
       return <ComparisonTable artifact={artifact} />;
+
     default:
       return (
         <Card>
-          <p className="text-xs uppercase tracking-[0.22em] text-ink/45">Unknown artifact</p>
-          <p className="mt-2 text-sm text-ink/70">Unknown artifact type: {artifact.type}</p>
+          <p className="text-xs uppercase tracking-[0.22em] text-ink/45">{artifact.type}</p>
+          <h3 className="mt-2 text-lg font-semibold">{artifact.title}</h3>
+          <p className="mt-3 text-sm text-ink/70">
+            Renderer for <span className="font-mono">{artifact.type}</span> is not yet available.
+          </p>
         </Card>
       );
   }
