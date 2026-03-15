@@ -99,7 +99,7 @@ export function useWebSocket() {
             setLoading(false);
             break;
         }
-      } catch (e) {
+      } catch {
         setError('Failed to parse WebSocket message');
       }
     };
