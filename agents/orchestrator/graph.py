@@ -2,7 +2,8 @@
 
 from langgraph.graph import StateGraph
 
-from agents.orchestrator.nodes import router_node, synthesis_node
+from agents.orchestrator.router_agent import router_node
+from agents.orchestrator.nodes import synthesis_node
 from agents.orchestrator.state import OrchestrationState
 from agents.utils.logger import get_logger
 
