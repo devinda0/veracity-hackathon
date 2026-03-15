@@ -25,11 +25,15 @@ class OrchestratorService:
         db: AsyncIOMotorDatabase,
         *,
         manager: ConnectionManager | None = None,
+        redis_client: Any | None = None,
         embedding_service_cls: type[EmbeddingService] = EmbeddingService,
+        session_service_cls: type[SessionService] = SessionService,
     ) -> None:
         self.db = db
         self.manager = manager or get_connection_manager()
+        self.redis_client = redis_client
         self.embedding_service_cls = embedding_service_cls
+        self.session_service_cls = session_service_cls
         self._graph: Any | None = None
 
     async def run(
@@ -41,9 +45,20 @@ class OrchestratorService:
         business_context: str | None = None,
         timeout_seconds: int = 30,
     ) -> dict[str, Any]:
-        session, history = await SessionService(self.db).get_with_history(session_id, user_id)
+        session_service = self.session_service_cls(
+            self.db,
+            redis_client=self.redis_client,
+            embedding_service_cls=self.embedding_service_cls,
+        )
+        session = await session_service.get(session_id, user_id)
         if session is None:
             raise ValueError("Session not found")
+
+        session_context = await session_service.get_session_context(
+            session_id=session_id,
+            user_id=user_id,
+            query=query,
+        )
 
         await self.manager.broadcast(
             session_id,
@@ -57,7 +72,7 @@ class OrchestratorService:
                     user_id=user_id,
                     query=query,
                     business_context=business_context,
-                    history=history,
+                    session_context=session_context,
                 ),
                 timeout=timeout_seconds,
             )
@@ -97,6 +112,7 @@ class OrchestratorService:
                 "$inc": {"message_count": 1},
             },
         )
+        await session_service.invalidate_context_cache(session_id)
 
         await self.manager.broadcast(
             session_id,
@@ -131,13 +147,13 @@ class OrchestratorService:
         user_id: str,
         query: str,
         business_context: str | None,
-        history: list[dict[str, Any]],
+        session_context: dict[str, Any],
     ) -> dict[str, Any]:
         await self.manager.broadcast(
             session_id,
             status_message(session_id, "orchestrator", "loading_context"),
         )
-        context_docs = await self._load_context(query=query, session_id=session_id)
+        context_docs = session_context.get("business_context", {}).get("relevant_chunks", [])
 
         artifacts = self._build_context_artifacts(context_docs)
         for artifact in artifacts:
@@ -164,7 +180,7 @@ class OrchestratorService:
             user_id=user_id,
             query=query,
             business_context=business_context,
-            history=history,
+            session_context=session_context,
             context_docs=context_docs,
         )
 
@@ -190,15 +206,6 @@ class OrchestratorService:
             "cost": self._coerce_float(graph_state.get("cost_estimate")),
         }
 
-    async def _load_context(self, *, query: str, session_id: str) -> list[dict[str, Any]]:
-        try:
-            service = self.embedding_service_cls(db=self.db)
-            results = await service.search(query=query, session_id=session_id, limit=3)
-            return [result for result in results if isinstance(result, dict)]
-        except Exception as exc:
-            logger.warning("orchestrator_context_unavailable", session_id=session_id, error=str(exc))
-            return []
-
     async def _run_graph(
         self,
         *,
@@ -206,31 +213,30 @@ class OrchestratorService:
         user_id: str,
         query: str,
         business_context: str | None,
-        history: list[dict[str, Any]],
+        session_context: dict[str, Any],
         context_docs: list[dict[str, Any]],
     ) -> dict[str, Any]:
         initial_state = {
             "user_query": query,
             "user_id": user_id,
             "session_id": session_id,
-            "business_context": business_context or self._summarize_context(context_docs),
-            "conversation_history": [
-                {
-                    "role": message.get("role", "assistant"),
-                    "content": message.get("content", ""),
-                    "timestamp": message.get("timestamp").isoformat()
-                    if hasattr(message.get("timestamp"), "isoformat")
-                    else message.get("timestamp"),
-                }
-                for message in history[-10:]
-            ],
+            "business_context": self._merge_business_context(
+                business_context,
+                session_context.get("formatted_context"),
+                context_docs,
+            ),
+            "conversation_history": list(session_context.get("conversation_history", [])[-10:]),
             "planned_agents": [],
             "current_agent": None,
             "agent_outputs": {},
             "synthesis_result": None,
             "artifacts": [],
             "start_time": datetime.now(UTC).timestamp(),
-            "trace_data": {"context_results": len(context_docs)},
+            "trace_data": {
+                "context_results": len(context_docs),
+                "history_messages": len(session_context.get("conversation_history", [])),
+                "recent_insights": len(session_context.get("recent_insights", [])),
+            },
             "tokens_used": 0,
             "cost_estimate": 0.0,
         }
@@ -345,6 +351,25 @@ class OrchestratorService:
         if not snippets:
             return None
         return "\n".join(f"- {snippet}" for snippet in snippets[:3])
+
+    def _merge_business_context(
+        self,
+        business_context: str | None,
+        formatted_session_context: str | None,
+        context_docs: list[dict[str, Any]],
+    ) -> str | None:
+        parts: list[str] = []
+
+        if business_context:
+            parts.append(f"User-provided business context:\n{business_context.strip()}")
+        if formatted_session_context:
+            parts.append(f"Session memory:\n{formatted_session_context.strip()}")
+
+        merged_context = "\n\n".join(parts).strip()
+        if merged_context:
+            return merged_context
+
+        return self._summarize_context(context_docs)
 
     @staticmethod
     def _coerce_int(value: Any) -> int | None:
