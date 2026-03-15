@@ -3,22 +3,12 @@ import { useState } from 'react';
 
 import { formatDistanceToNow } from 'date-fns';
 
-import type { Message } from '@/types';
+import type { Message } from '@/stores/chatStore';
 import { ArtifactRenderer } from '@/components/ArtifactRenderer';
-
-interface AgentTraceStatus {
-  name: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-}
 
 interface MessageMeta extends Message {
   agent?: string;
   citations?: string[];
-  cost?: number;
-  tokensUsed?: number;
-  agentTrace?: {
-    agents: AgentTraceStatus[];
-  };
 }
 
 interface MessageBubbleProps {

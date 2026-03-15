@@ -5,7 +5,7 @@ import { useChatStore } from '@/stores/chatStore';
 
 export function ChatStream() {
   const messages = useChatStore((state) => state.messages);
-  const loading = useChatStore((state) => state.isStreaming);
+  const loading = useChatStore((state) => state.loading);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
