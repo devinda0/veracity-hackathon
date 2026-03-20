@@ -58,9 +58,11 @@ class FirecrawlTool(BaseDataSourceTool):
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    # Firecrawl v1 wraps content in a nested "data" key
+                    inner = data.get("data") or data
                     return {
                         "url": url,
-                        "content": data.get("markdown", ""),
+                        "content": inner.get("markdown", ""),
                         "source": "firecrawl",
                     }
                 elif resp.status == 429:
@@ -83,9 +85,11 @@ class FirecrawlTool(BaseDataSourceTool):
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    # Firecrawl v1 returns search results under "data", not "results"
+                    results = data.get("data") or data.get("results", [])
                     return {
                         "query": query,
-                        "results": data.get("results", []),
+                        "results": results,
                         "source": "firecrawl",
                     }
                 elif resp.status == 429:

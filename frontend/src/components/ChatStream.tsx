@@ -1,16 +1,18 @@
 import { useEffect, useRef } from 'react';
 
+import { ClarificationChips } from '@/components/ClarificationChips';
 import { MessageBubble } from '@/components/MessageBubble';
 import { useChatStore } from '@/stores/chatStore';
 
 export function ChatStream() {
   const messages = useChatStore((state) => state.messages);
   const loading = useChatStore((state) => state.loading);
+  const clarificationOptions = useChatStore((state) => state.clarificationOptions);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, clarificationOptions]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white p-4 md:p-6">
@@ -22,6 +24,10 @@ export function ChatStream() {
           </div>
         ) : (
           messages.map((message) => <MessageBubble key={message.id} message={message} />)
+        )}
+
+        {clarificationOptions && clarificationOptions.length > 0 && (
+          <ClarificationChips options={clarificationOptions} />
         )}
 
         {loading && (
@@ -39,4 +45,3 @@ export function ChatStream() {
     </div>
   );
 }
-

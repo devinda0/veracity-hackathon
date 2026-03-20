@@ -1,3 +1,4 @@
+import os
 import time
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,16 @@ async def lifespan(app: FastAPI):
     app.state.started_at = time.time()
     app.state.mongo_db = None
     app.state.qdrant_client = None
+
+    # Export API keys so agent submodules (langchain_google_genai etc.) can read them
+    for env_var, value in {
+        "GOOGLE_API_KEY": settings.GOOGLE_API_KEY,
+        "GEMINI_API_KEY": settings.GEMINI_API_KEY,
+        "FIRECRAWL_API_KEY": settings.FIRECRAWL_API_KEY,
+        "SERPAPI_API_KEY": settings.SERPAPI_API_KEY,
+    }.items():
+        if value:
+            os.environ.setdefault(env_var, value)
 
     logger.info(
         "app_startup",

@@ -67,7 +67,7 @@ async def router_node(state: OrchestrationState) -> dict[str, Any]:
     # unresolved-import warnings without affecting runtime behaviour.
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0)
     structured_llm = llm.with_structured_output(RouterPlan)
 
     system_prompt = (

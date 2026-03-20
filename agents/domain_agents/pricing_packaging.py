@@ -110,7 +110,7 @@ async def _run_pricing_packaging_analysis(state: OrchestrationState) -> dict[str
     """Gather pricing evidence and produce structured pricing analysis."""
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.3)
     structured_llm = llm.with_structured_output(PricingPackagingAnalysis)
 
     user_query = state["user_query"]
@@ -237,4 +237,4 @@ async def pricing_packaging_agent(state: OrchestrationState) -> OrchestrationSta
             "error": str(exc),
         }
 
-    return state
+    return {"agent_outputs": {_AGENT_NAME: state["agent_outputs"][_AGENT_NAME]}}

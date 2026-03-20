@@ -1,0 +1,94 @@
+flowchart TD
+    User(["👤 Analyst / User"])
+
+    subgraph AGENT["📈 Market Trend Agent"]
+        direction TB
+
+        subgraph INPUT["Input Layer"]
+            Query["🗣️ Query Parser\n(intent + asset + timeframe)"]
+            Assets["🏷️ Asset Resolver\n(tickers, sectors, indices)"]
+        end
+
+        subgraph MEMORY["Memory & Knowledge"]
+            direction LR
+            ContextWin["🧠 Context Window\n(active session state)"]
+            VectorDB["💾 Vector Store\n(historical reports & news)"]
+            MarketKB["📚 Market Knowledge Base\n(macro indicators, sector data)"]
+        end
+
+        subgraph DATACOLLECTION["Data Collection Layer"]
+            direction LR
+            PriceAPI["💹 Price Feed API\n(OHLCV data)"]
+            NewsAPI["📰 News & Sentiment API\n(headlines, NLP score)"]
+            MacroAPI["🌐 Macro Data API\n(CPI, GDP, rates)"]
+            SocialAPI["📱 Social Signals\n(Reddit, X/Twitter sentiment)"]
+            SECFiling["📄 SEC / Filings\n(earnings, 10-K, 8-K)"]
+        end
+
+        subgraph ANALYSIS["Analysis Engine"]
+            direction TB
+            TechAnalysis["📊 Technical Analysis\n(RSI, MACD, Bollinger, EMA)"]
+            FundAnalysis["🏦 Fundamental Analysis\n(P/E, EPS, revenue growth)"]
+            SentimentAnalysis["💬 Sentiment Scoring\n(bull/bear signal aggregation)"]
+            MacroAnalysis["🌍 Macro Analysis\n(interest rates, inflation impact)"]
+            PatternDetect["🔎 Pattern Detection\n(trend reversals, breakouts)"]
+        end
+
+        subgraph REASONING["Reasoning & Planning"]
+            Planner["🗺️ Research Planner\n(decompose into sub-queries)"]
+            Reflect["🔁 Reflector\n(validate findings, fill gaps)"]
+            RiskEngine["⚠️ Risk Assessor\n(volatility, drawdown, exposure)"]
+            Decide["⚖️ Decision Maker\n(synthesize signals → insight)"]
+        end
+
+        subgraph OUTPUT["Output Layer"]
+            ReportGen["📝 Report Generator\n(trend summary + rationale)"]
+            Alerts["🔔 Alert System\n(threshold triggers)"]
+            Visualize["📉 Chart Renderer\n(trend + signal overlays)"]
+        end
+    end
+
+    Ext(["📡 Live Market Data Sources"])
+
+    User -->|"query: 'Analyze NVDA trend Q1 2026'"| Query
+    Query --> Assets
+    Assets --> Planner
+    Planner <-->|"retrieve context"| ContextWin
+    Planner <-->|"semantic search"| VectorDB
+    Planner <-->|"macro reference"| MarketKB
+    Planner -->|"fetch price data"| PriceAPI
+    Planner -->|"fetch news"| NewsAPI
+    Planner -->|"fetch macro"| MacroAPI
+    Planner -->|"fetch sentiment"| SocialAPI
+    Planner -->|"fetch filings"| SECFiling
+    Ext -.->|"real-time feed"| PriceAPI
+    Ext -.->|"real-time feed"| NewsAPI
+    Ext -.->|"real-time feed"| MacroAPI
+    PriceAPI --> TechAnalysis
+    PriceAPI --> PatternDetect
+    SECFiling --> FundAnalysis
+    NewsAPI --> SentimentAnalysis
+    SocialAPI --> SentimentAnalysis
+    MacroAPI --> MacroAnalysis
+    TechAnalysis --> Reflect
+    FundAnalysis --> Reflect
+    SentimentAnalysis --> Reflect
+    MacroAnalysis --> Reflect
+    PatternDetect --> Reflect
+    Reflect -->|"gaps found → re-fetch"| Planner
+    Reflect -->|"sufficient data"| RiskEngine
+    RiskEngine --> Decide
+    Decide --> ReportGen
+    Decide --> Alerts
+    Decide --> Visualize
+    ReportGen -->|"trend report"| User
+    Alerts -->|"price / signal alerts"| User
+    Visualize -->|"charts"| User
+
+    style AGENT fill:#0f172a,stroke:#38bdf8,color:#fff
+    style INPUT fill:#172554,stroke:#3b82f6,color:#fff
+    style MEMORY fill:#052e16,stroke:#22c55e,color:#fff
+    style DATACOLLECTION fill:#1c1917,stroke:#f97316,color:#fff
+    style ANALYSIS fill:#1e1b4b,stroke:#818cf8,color:#fff
+    style REASONING fill:#2d1b04,stroke:#fbbf24,color:#fff
+    style OUTPUT fill:#1a0a2e,stroke:#c084fc,color:#fff

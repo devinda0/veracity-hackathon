@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Vector Agents"
+    APP_NAME: str = "CoALA"
     APP_ENV: Literal["dev", "prod", "test"] = "dev"
     DEBUG: bool = False
 
@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     POSTGRES_URL: str = "postgresql://postgres:postgres@localhost:5432/vector_agents"
 
     OPENAI_API_KEY: str = "sk-placeholder"
+    GOOGLE_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     FIRECRAWL_API_KEY: str = ""
     SERPAPI_API_KEY: str = ""

@@ -7,7 +7,7 @@ import json
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from agents.orchestrator.state import OrchestrationState
 from agents.utils.logger import get_logger
@@ -17,44 +17,111 @@ logger = get_logger(__name__)
 _SYNTHESIS_TIMEOUT_SECONDS = 90
 
 
+def _s(v: object, default: str = "") -> str:
+    return default if v is None else str(v)
+
+
+def _sl(v: object) -> list[str]:
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(i) for i in v if i is not None]
+    return [str(v)]
+
+
+def _ci(v: object, default: int = 50) -> int:
+    try:
+        return max(0, min(100, int(v if v is not None else default)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 class Insight(BaseModel):
     """A synthesized key insight with confidence and citations."""
 
-    title: str
-    detail: str
-    confidence_score: int = Field(ge=0, le=100)
-    source_citations: list[str]
+    title: str = ""
+    detail: str = ""
+    confidence_score: int = 50
+    source_citations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["title"] = _s(data.get("title"))
+        data["detail"] = _s(data.get("detail"))
+        data["confidence_score"] = _ci(data.get("confidence_score"))
+        data["source_citations"] = _sl(data.get("source_citations"))
+        return data
 
 
 class Recommendation(BaseModel):
     """A prioritized recommendation with confidence and citations."""
 
-    action: str
-    rationale: str
-    priority: str
-    confidence_score: int = Field(ge=0, le=100)
-    source_citations: list[str]
+    action: str = ""
+    rationale: str = ""
+    priority: str = "medium"
+    confidence_score: int = 50
+    source_citations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["action"] = _s(data.get("action"))
+        data["rationale"] = _s(data.get("rationale"))
+        data["priority"] = _s(data.get("priority"), "medium") or "medium"
+        data["confidence_score"] = _ci(data.get("confidence_score"))
+        data["source_citations"] = _sl(data.get("source_citations"))
+        return data
 
 
 class RiskOpportunityItem(BaseModel):
     """Risk/opportunity matrix entry."""
 
-    item: str
-    category: str
-    impact: str
-    likelihood: str
-    confidence_score: int = Field(ge=0, le=100)
-    source_citations: list[str]
+    item: str = ""
+    category: str = ""
+    impact: str = ""
+    likelihood: str = ""
+    confidence_score: int = 50
+    source_citations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["item"] = _s(data.get("item"))
+        data["category"] = _s(data.get("category"))
+        data["impact"] = _s(data.get("impact"))
+        data["likelihood"] = _s(data.get("likelihood"))
+        data["confidence_score"] = _ci(data.get("confidence_score"))
+        data["source_citations"] = _sl(data.get("source_citations"))
+        return data
 
 
 class SynthesisOutput(BaseModel):
     """Structured synthesis response from the LLM."""
 
-    executive_summary: str
-    key_insights: list[Insight]
-    recommended_actions: list[Recommendation]
-    risk_opportunity_matrix: list[RiskOpportunityItem]
-    next_steps: list[str]
+    executive_summary: str = ""
+    key_insights: list[Insight] = Field(default_factory=list)
+    recommended_actions: list[Recommendation] = Field(default_factory=list)
+    risk_opportunity_matrix: list[RiskOpportunityItem] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["executive_summary"] = _s(data.get("executive_summary"))
+        data["next_steps"] = _sl(data.get("next_steps"))
+        for key in ("key_insights", "recommended_actions", "risk_opportunity_matrix"):
+            if not isinstance(data.get(key), list):
+                data[key] = []
+        return data
 
 
 def _collect_completed_agent_outputs(state: OrchestrationState) -> dict[str, Any]:
@@ -317,8 +384,8 @@ async def synthesis_agent(state: OrchestrationState) -> OrchestrationState:
         agent_summaries = _collect_completed_agent_outputs(state)
         source_trail = _build_source_trail(agent_summaries)
 
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
-        structured_llm = llm.with_structured_output(SynthesisOutput)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.2)
+        structured_llm = llm.with_structured_output(SynthesisOutput, include_raw=True)
 
         synthesis_prompt = (
             "You are a synthesis expert for growth intelligence reports. Aggregate the provided agent "
@@ -335,10 +402,11 @@ async def synthesis_agent(state: OrchestrationState) -> OrchestrationState:
             f"Source trail: {json.dumps(source_trail, default=str)}"
         )
 
-        synthesis = await asyncio.wait_for(
+        raw_result = await asyncio.wait_for(
             structured_llm.ainvoke([{"role": "user", "content": synthesis_prompt}]),
             timeout=_SYNTHESIS_TIMEOUT_SECONDS,
         )
+        synthesis: SynthesisOutput = raw_result.get("parsed") or SynthesisOutput()
         synthesis = _validate_citations(synthesis, source_trail)
 
         artifacts = _generate_artifacts(agent_summaries, synthesis)

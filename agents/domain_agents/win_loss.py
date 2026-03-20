@@ -99,7 +99,7 @@ async def _run_win_loss_analysis(state: OrchestrationState) -> dict[str, Any]:
     """Gather community/case-study signals and produce structured win/loss output."""
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.3)
     structured_llm = llm.with_structured_output(WinLossAnalysis)
 
     user_query = state["user_query"]
@@ -203,4 +203,4 @@ async def win_loss_agent(state: OrchestrationState) -> OrchestrationState:
             "error": str(exc),
         }
 
-    return state
+    return {"agent_outputs": {_AGENT_NAME: state["agent_outputs"][_AGENT_NAME]}}

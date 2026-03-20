@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from agents.orchestrator.state import OrchestrationState
 from agents.tools.firecrawl_tool import scrape_url, search_web
@@ -22,26 +23,29 @@ _AGENT_TIMEOUT_SECONDS = 60
 class MarketTrendAnalysis(BaseModel):
     """Structured output for market trend analysis."""
 
-    growth_indicators: list[str] = Field(
-        description="Signals that indicate market growth or contraction"
-    )
-    market_size_tam: str = Field(
-        description="Summary of market size, TAM, or demand expansion"
-    )
-    emerging_opportunities: list[str] = Field(
-        description="Emerging opportunities and adjacent growth areas"
-    )
-    risk_factors: list[str] = Field(
-        description="Risks or headwinds affecting market growth"
-    )
-    confidence_score: int = Field(
-        ge=0,
-        le=100,
-        description="Confidence score from 0 to 100",
-    )
-    summary: str = Field(
-        description="Concise synthesis of the overall market trend picture"
-    )
+    growth_indicators: list[str] = Field(default_factory=list)
+    market_size_tam: str = ""
+    emerging_opportunities: list[str] = Field(default_factory=list)
+    risk_factors: list[str] = Field(default_factory=list)
+    confidence_score: int = Field(default=50)
+    summary: str = ""
+
+    @field_validator("confidence_score", mode="before")
+    @classmethod
+    def clamp_confidence(cls, v: object) -> int:
+        try:
+            return max(0, min(100, int(v if v is not None else 50)))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 50
+
+    @field_validator("growth_indicators", "emerging_opportunities", "risk_factors", mode="before")
+    @classmethod
+    def coerce_str_list(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(i) for i in v if i is not None]
+        return [str(v)]
 
 
 def _tool_result_payload(result: Any) -> dict[str, Any]:
@@ -69,7 +73,7 @@ async def _run_market_trend_analysis(
     # Deferred import keeps editor diagnostics clean until dependencies are installed.
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.3)
     structured_llm = llm.with_structured_output(MarketTrendAnalysis)
 
     trend_task = google_trends(state["user_query"])
@@ -82,8 +86,22 @@ async def _run_market_trend_analysis(
         web_task,
     )
 
+    # If the query contains a domain/URL, scrape it directly first
     scraped_source: dict[str, Any] = {}
-    if web_results.success and web_results.data:
+    domain_match = re.search(
+        r"(?:https?://)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)",
+        state["user_query"],
+    )
+    if domain_match:
+        domain = domain_match.group(0)
+        direct_url = domain if domain.startswith("http") else f"https://{domain}"
+        scraped_result = await scrape_url(direct_url)
+        scraped_source = _tool_result_payload(scraped_result)
+        if scraped_source["success"]:
+            scraped_source["data"] = {**scraped_source["data"], "source_url": direct_url}
+
+    # Fall back to top search result if direct scrape failed or no domain in query
+    if not scraped_source.get("success") and web_results.success and web_results.data:
         results = web_results.data.get("results", [])
         if results:
             top_link = results[0].get("url") or results[0].get("link")
@@ -174,4 +192,4 @@ async def market_trend_agent(state: OrchestrationState) -> OrchestrationState:
             "error": str(exc),
         }
 
-    return state
+    return {"agent_outputs": {_AGENT_NAME: state["agent_outputs"][_AGENT_NAME]}}

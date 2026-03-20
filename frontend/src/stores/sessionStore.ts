@@ -51,6 +51,7 @@ interface SessionStore {
   loadSessions: () => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
   selectSession: (id: string) => Promise<void>;
+  bumpMessageCount: (sessionId: string, by?: number) => void;
 }
 
 function toSession(session: SessionApiResponse): Session {
@@ -82,6 +83,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   error: null,
   loading: false,
   sessions: [],
+  bumpMessageCount: (sessionId, by = 2) =>
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId ? { ...s, messageCount: s.messageCount + by } : s,
+      ),
+    })),
   createSession: async () => {
     set({ loading: true, error: null });
 

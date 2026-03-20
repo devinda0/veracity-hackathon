@@ -48,7 +48,7 @@ class OrchestratorService:
         user_id: str,
         query: str,
         business_context: str | None = None,
-        timeout_seconds: int = 30,
+        timeout_seconds: int = 300,
     ) -> dict[str, Any]:
         session_service = self.session_service_cls(
             self.db,
@@ -261,10 +261,10 @@ class OrchestratorService:
             return initial_state
 
         try:
-            if hasattr(graph, "astream"):
-                result = await self._stream_graph_updates(graph, initial_state)
-            elif hasattr(graph, "ainvoke"):
+            if hasattr(graph, "ainvoke"):
                 result = await self._invoke_graph(graph, initial_state)
+            elif hasattr(graph, "astream"):
+                result = await self._stream_graph_updates(graph, initial_state)
             else:
                 await self.manager.broadcast(
                     session_id,
@@ -304,27 +304,31 @@ class OrchestratorService:
         )
 
         try:
-            stream = graph.astream(initial_state, stream_mode="updates")
+            stream = graph.astream(initial_state, stream_mode="values")
         except TypeError as exc:
             logger.warning("orchestrator_graph_stream_mode_unsupported", error=str(exc))
             return await self._invoke_graph(graph, initial_state)
 
-        async for chunk in stream:
-            if not isinstance(chunk, dict):
+        prev_state: dict[str, Any] = dict(initial_state)
+        async for state in stream:
+            if not isinstance(state, dict):
                 continue
 
-            for node_name, update in chunk.items():
-                if not isinstance(update, dict):
+            # Each chunk IS the complete current state — no manual merging needed.
+            final_state = state
+
+            # Detect router completion (planned_agents appeared).
+            if state.get("planned_agents") and not prev_state.get("planned_agents"):
+                await self._broadcast_router_status(final_state)
+
+            # Detect newly completed domain agents.
+            prev_outputs: dict[str, Any] = dict(prev_state.get("agent_outputs") or {})
+            curr_outputs: dict[str, Any] = dict(state.get("agent_outputs") or {})
+            for agent_name in list(curr_outputs):
+                if not isinstance(agent_name, str):
                     continue
-
-                final_state = self._merge_state(final_state, update)
-
-                if node_name == "router":
-                    await self._broadcast_router_status(final_state)
-                    continue
-
-                if node_name in self._EXECUTABLE_GRAPH_AGENTS:
-                    await self._broadcast_agent_completion(final_state, node_name)
+                if agent_name not in prev_outputs and agent_name in self._EXECUTABLE_GRAPH_AGENTS:
+                    await self._broadcast_agent_completion(final_state, agent_name)
                     if not synthesis_started:
                         await self.manager.broadcast(
                             session_id,
@@ -336,29 +340,31 @@ class OrchestratorService:
                             ),
                         )
                         synthesis_started = True
-                    continue
 
-                if node_name == "synthesis":
-                    if not synthesis_started:
-                        await self.manager.broadcast(
-                            session_id,
-                            status_message(
-                                session_id,
-                                "synthesis",
-                                "running",
-                                metadata=self._status_metadata(final_state),
-                            ),
-                        )
+            # Detect synthesis completion (synthesis_result appeared).
+            if state.get("synthesis_result") and not prev_state.get("synthesis_result"):
+                if not synthesis_started:
                     await self.manager.broadcast(
                         session_id,
                         status_message(
                             session_id,
                             "synthesis",
-                            "completed",
+                            "running",
                             metadata=self._status_metadata(final_state),
                         ),
                     )
-                    synthesis_started = True
+                await self.manager.broadcast(
+                    session_id,
+                    status_message(
+                        session_id,
+                        "synthesis",
+                        "completed",
+                        metadata=self._status_metadata(final_state),
+                    ),
+                )
+                synthesis_started = True
+
+            prev_state = state
 
         if not synthesis_started:
             await self.manager.broadcast(
@@ -472,8 +478,17 @@ class OrchestratorService:
         if isinstance(synthesis_result, str) and synthesis_result.strip():
             return synthesis_result.strip()
         if isinstance(synthesis_result, dict) and synthesis_result:
-            if isinstance(synthesis_result.get("summary"), str) and synthesis_result["summary"].strip():
-                return synthesis_result["summary"].strip()
+            # Prefer the formatted markdown from the frontend_response sub-dict
+            frontend = synthesis_result.get("frontend_response")
+            if isinstance(frontend, dict):
+                md = frontend.get("markdown")
+                if isinstance(md, str) and md.strip():
+                    return md.strip()
+            # Fall back to executive_summary or summary key
+            for key in ("executive_summary", "summary"):
+                val = synthesis_result.get(key)
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
             return str(synthesis_result)
 
         lines = [f"Research request received: {query.strip()}"]
@@ -734,7 +749,7 @@ class OrchestratorService:
     ) -> None:
         trace_data = graph_state.setdefault("trace_data", {})
         tracked_agents = trace_data.setdefault("agent_statuses", {})
-        tracked = dict(tracked_agents.get(agent_name) or {})
+        tracked: dict[str, Any] = dict(tracked_agents.get(agent_name) or {})
         now = datetime.now(UTC).timestamp()
 
         tracked["name"] = agent_name

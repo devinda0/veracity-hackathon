@@ -86,7 +86,7 @@ async def _run_positioning_messaging_analysis(
     """Gather web and ad messaging evidence and synthesize structured output."""
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.3)
     structured_llm = llm.with_structured_output(PositioningMessagingAnalysis)
 
     user_query = state["user_query"]
@@ -205,4 +205,4 @@ async def positioning_messaging_agent(state: OrchestrationState) -> Orchestratio
             "error": str(exc),
         }
 
-    return state
+    return {"agent_outputs": {_AGENT_NAME: state["agent_outputs"][_AGENT_NAME]}}

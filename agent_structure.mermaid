@@ -1,0 +1,61 @@
+flowchart TD
+    User(["👤 User / Environment"])
+
+    subgraph AGENT["🤖 Agent"]
+        direction TB
+
+        subgraph INPUT["Input Processing"]
+            Perceive["Perception Layer\n(parse & embed input)"]
+        end
+
+        subgraph MEMORY["Memory Systems"]
+            direction LR
+            STM["🧠 Short-Term Memory\n(context window)"]
+            LTM["💾 Long-Term Memory\n(vector store / RAG)"]
+            Episodic["📖 Episodic Memory\n(past interactions)"]
+        end
+
+        subgraph REASONING["Reasoning Engine"]
+            Planner["🗺️ Planner\n(decompose goal into steps)"]
+            Reflect["🔁 Reflector\n(evaluate progress)"]
+            Decide["⚖️ Decision Maker\n(select next action)"]
+        end
+
+        subgraph TOOLS["Tool Use Layer"]
+            direction LR
+            Search["🔍 Web Search"]
+            Code["💻 Code Executor"]
+            Files["📁 File System"]
+            APIs["🔌 External APIs"]
+        end
+
+        subgraph OUTPUT["Output Generation"]
+            Respond["✍️ Response Synthesis"]
+        end
+    end
+
+    User -->|"prompt / task"| Perceive
+    Perceive --> STM
+    Perceive --> Planner
+    STM <-->|"read/write context"| Planner
+    LTM <-->|"retrieve relevant knowledge"| Planner
+    Episodic <-->|"recall past sessions"| Planner
+    Planner --> Decide
+    Decide -->|"use tool"| Search
+    Decide -->|"use tool"| Code
+    Decide -->|"use tool"| Files
+    Decide -->|"use tool"| APIs
+    Search -->|"observation"| Reflect
+    Code -->|"observation"| Reflect
+    Files -->|"observation"| Reflect
+    APIs -->|"observation"| Reflect
+    Reflect -->|"continue loop"| Decide
+    Reflect -->|"goal achieved"| Respond
+    Respond -->|"final answer / action"| User
+
+    style AGENT fill:#1e1e2e,stroke:#7c3aed,color:#fff
+    style INPUT fill:#172554,stroke:#3b82f6,color:#fff
+    style MEMORY fill:#052e16,stroke:#16a34a,color:#fff
+    style REASONING fill:#2d1b04,stroke:#f59e0b,color:#fff
+    style TOOLS fill:#2a0a0a,stroke:#ef4444,color:#fff
+    style OUTPUT fill:#1a0a2e,stroke:#a855f7,color:#fff

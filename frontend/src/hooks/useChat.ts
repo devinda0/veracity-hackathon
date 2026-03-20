@@ -10,6 +10,8 @@ export function useChat() {
   const addMessage = useChatStore((state) => state.addMessage);
   const setCurrentQueryState = useChatStore((state) => state.setCurrentQuery);
   const setLoading = useChatStore((state) => state.setLoading);
+  const clearLiveAgentStatuses = useChatStore((state) => state.clearLiveAgentStatuses);
+  const setClarificationOptions = useChatStore((state) => state.setClarificationOptions);
 
   const setCurrentQuery = (value: string) => {
     startTransition(() => {
@@ -34,6 +36,8 @@ export function useChat() {
       timestamp: now,
     });
     setCurrentQueryState('');
+    clearLiveAgentStatuses();
+    setClarificationOptions(null);
     setLoading(true);
 
     await new Promise((resolve) => window.setTimeout(resolve, 350));

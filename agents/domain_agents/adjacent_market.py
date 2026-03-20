@@ -74,7 +74,7 @@ async def _run_adjacent_market_analysis(state: OrchestrationState) -> dict[str, 
     """Gather adjacent-market evidence and generate scored recommendations."""
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.3)
     structured_llm = llm.with_structured_output(AdjacentMarketAnalysis)
 
     user_query = state["user_query"]
@@ -193,4 +193,4 @@ async def adjacent_market_agent(state: OrchestrationState) -> OrchestrationState
             "error": str(exc),
         }
 
-    return state
+    return {"agent_outputs": {_AGENT_NAME: state["agent_outputs"][_AGENT_NAME]}}

@@ -9,9 +9,9 @@ class OrchestratorConfig:
     """Configuration values for routing and synthesis behavior."""
 
     # Model selection
-    router_model: str = "gemini-2.0-flash"
-    agent_model: str = "gemini-2.0-flash"
-    synthesis_model: str = "gemini-2.0-flash"
+    router_model: str = "gemini-2.5-pro"
+    agent_model: str = "gemini-2.5-pro"
+    synthesis_model: str = "gemini-2.5-pro"
 
     # Execution behavior
     max_agents: int = 6

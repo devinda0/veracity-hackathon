@@ -35,18 +35,37 @@ export function InputBar() {
   async function handleSendText() {
     if (!inputText.trim() || !isConnected || loading || !sessionId) return;
 
+    const content = inputText.trim();
     const userMsg = {
       id: uuidv4(),
       role: 'user' as const,
-      content: inputText,
+      content,
       timestamp: new Date(),
     };
 
     addMessage(userMsg);
-    send(JSON.stringify({ type: 'text', content: inputText }));
-
     setInputText('');
     setError('');
+    useChatStore.getState().setLoading(true);
+
+    try {
+      const res = await fetch('/api/v1/chat/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ session_id: sessionId, query: content }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(payload.detail ?? 'Failed to send message');
+      }
+    } catch (err) {
+      setError(String(err));
+      useChatStore.getState().setLoading(false);
+    }
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {

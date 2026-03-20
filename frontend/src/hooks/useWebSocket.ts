@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { AgentTrace, Artifact } from '@/stores/chatStore';
+import type { AgentTrace, Artifact, ClarificationOption } from '@/stores/chatStore';
 import { useChatStore } from '@/stores/chatStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import { useUiStore } from '@/stores/uiStore';
 
 interface WSMessage {
-  type: 'status' | 'artifact' | 'thinking' | 'final' | 'error';
+  type: 'status' | 'artifact' | 'thinking' | 'final' | 'error' | 'clarification';
   session_id: string;
   content: string;
   agent?: string;
@@ -26,6 +27,9 @@ export function useWebSocket() {
   const addArtifact = useChatStore((state) => state.addArtifact);
   const setLoading = useChatStore((state) => state.setLoading);
   const setError = useChatStore((state) => state.setError);
+  const setLiveAgentStatus = useChatStore((state) => state.setLiveAgentStatus);
+  const clearLiveAgentStatuses = useChatStore((state) => state.clearLiveAgentStatuses);
+  const setClarificationOptions = useChatStore((state) => state.setClarificationOptions);
   const setConnectionStatus = useUiStore((state) => state.setConnectionStatus);
 
   const connect = useCallback(() => {
@@ -39,22 +43,34 @@ export function useWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/v1/ws/chat?session_id=${encodeURIComponent(sessionId)}`;
 
-    wsRef.current = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
 
-    wsRef.current.onopen = () => {
+    ws.onopen = () => {
       setStatus('connected');
       setConnectionStatus('connected');
       reconnectAttemptsRef.current = 0;
     };
 
-    wsRef.current.onmessage = (event) => {
+    ws.onmessage = (event) => {
       try {
         const wsMsg: WSMessage = JSON.parse(event.data);
         const messageId = crypto.randomUUID();
 
         switch (wsMsg.type) {
-          case 'status':
+          case 'status': {
+            // Track live agent execution status. The backend sends status as wsMsg.content.
+            if (wsMsg.agent && wsMsg.content) {
+              const validStatuses = new Set(['pending', 'running', 'completed', 'failed']);
+              const agentStatus = validStatuses.has(wsMsg.content)
+                ? (wsMsg.content as 'pending' | 'running' | 'completed' | 'failed')
+                : 'running';
+              const durationMs = wsMsg.metadata?.duration_ms as number | undefined;
+              const agentError = wsMsg.metadata?.error as string | undefined;
+              setLiveAgentStatus(wsMsg.agent, agentStatus, durationMs, agentError);
+            }
             break;
+          }
 
           case 'thinking':
             addMessage({
@@ -90,30 +106,53 @@ export function useWebSocket() {
               tokensUsed: wsMsg.metadata?.tokens_used as number,
               cost: wsMsg.metadata?.cost as number,
             });
+            if (wsMsg.session_id) {
+              useSessionStore.getState().bumpMessageCount(wsMsg.session_id);
+            }
+            clearLiveAgentStatuses();
+            setClarificationOptions(null);
             setLoading(false);
             break;
           }
 
           case 'error':
             setError(wsMsg.content);
+            addMessage({
+              id: messageId,
+              role: 'assistant',
+              content: `Error: ${wsMsg.content}`,
+              timestamp: new Date(wsMsg.timestamp),
+            });
+            clearLiveAgentStatuses();
             setLoading(false);
             break;
+
+          case 'clarification': {
+            const opts = wsMsg.metadata?.options as ClarificationOption[] | undefined;
+            if (opts) {
+              setClarificationOptions(opts);
+            }
+            setLoading(false);
+            break;
+          }
         }
       } catch {
         setError('Failed to parse WebSocket message');
       }
     };
 
-    wsRef.current.onerror = () => {
+    ws.onerror = () => {
       setError('WebSocket error occurred');
     };
 
-    wsRef.current.onclose = () => {
+    ws.onclose = () => {
       setStatus('disconnected');
       setConnectionStatus('disconnected');
       setLoading(false);
 
-      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+      // Only reconnect if this WS is still the active one (prevents stale closures
+      // from StrictMode double-mount triggering a second connection).
+      if (ws === wsRef.current && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttemptsRef.current += 1;
         window.setTimeout(connect, RECONNECT_DELAY_MS);
       }
@@ -152,7 +191,10 @@ export function useWebSocket() {
     connect();
 
     return () => {
-      wsRef.current?.close();
+      // Detach from wsRef so the onclose handler knows not to reconnect.
+      const currentWs = wsRef.current;
+      wsRef.current = null;
+      currentWs?.close();
     };
   }, [sessionId, connect, setConnectionStatus]);
 

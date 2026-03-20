@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from agents.orchestrator.state import OrchestrationState
 from agents.tools.advertising_tool import search_meta_ads
@@ -20,35 +21,120 @@ _AGENT_NAME = "competitive_landscape_agent"
 _AGENT_TIMEOUT_SECONDS = 60
 
 
+def _to_str(v: object, default: str = "") -> str:
+    return default if v is None else str(v)
+
+
+def _to_str_list(v: object) -> list[str]:
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [str(i) for i in v if i is not None]
+    return [str(v)]
+
+
+def _clamp_int(v: object, default: int = 50) -> int:
+    try:
+        return max(0, min(100, int(v if v is not None else default)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_float(v: object, default: float = 0.0) -> float:
+    try:
+        return max(0.0, min(100.0, float(v if v is not None else default)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 class Competitor(BaseModel):
     """Normalized competitor record."""
 
-    name: str
-    positioning: str
-    estimated_market_share_pct: float = Field(ge=0, le=100)
-    key_strengths: list[str]
-    key_weaknesses: list[str]
+    name: str = ""
+    positioning: str = ""
+    estimated_market_share_pct: float = 0.0
+    key_strengths: list[str] = Field(default_factory=list)
+    key_weaknesses: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["name"] = _to_str(data.get("name"))
+        data["positioning"] = _to_str(data.get("positioning"))
+        data["estimated_market_share_pct"] = _clamp_float(data.get("estimated_market_share_pct"))
+        data["key_strengths"] = _to_str_list(data.get("key_strengths"))
+        data["key_weaknesses"] = _to_str_list(data.get("key_weaknesses"))
+        return data
 
 
 class FeatureComparisonRow(BaseModel):
     """Feature comparison matrix row."""
 
-    feature: str
-    our_company: str
-    competitors: dict[str, str]
+    feature: str = ""
+    our_company: str = ""
+    competitors: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("competitors", mode="before")
+    @classmethod
+    def coerce_competitors(cls, v: object) -> dict[str, str]:
+        if isinstance(v, dict):
+            return {str(k): str(val) for k, val in v.items() if val is not None}
+        return {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["feature"] = _to_str(data.get("feature"))
+        data["our_company"] = _to_str(data.get("our_company"))
+        return data
 
 
 class CompetitiveLandscapeAnalysis(BaseModel):
     """Structured output for competitive landscape analysis."""
 
-    competitors: list[Competitor]
-    feature_comparison_matrix: list[FeatureComparisonRow]
-    pricing_and_positioning: list[dict[str, str]]
-    market_share_estimation_notes: str
-    strategic_threats: list[str]
-    opportunities_vs_competitors: list[str]
-    confidence_score: int = Field(ge=0, le=100)
-    summary: str
+    competitors: list[Competitor] = Field(default_factory=list)
+    feature_comparison_matrix: list[FeatureComparisonRow] = Field(default_factory=list)
+    pricing_and_positioning: list[dict[str, str]] = Field(default_factory=list)
+    market_share_estimation_notes: str = ""
+    strategic_threats: list[str] = Field(default_factory=list)
+    opportunities_vs_competitors: list[str] = Field(default_factory=list)
+    confidence_score: int = 50
+    summary: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_fields(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data["market_share_estimation_notes"] = _to_str(data.get("market_share_estimation_notes"))
+        data["summary"] = _to_str(data.get("summary"))
+        data["confidence_score"] = _clamp_int(data.get("confidence_score"))
+        data["strategic_threats"] = _to_str_list(data.get("strategic_threats"))
+        data["opportunities_vs_competitors"] = _to_str_list(data.get("opportunities_vs_competitors"))
+
+        raw_pricing = data.get("pricing_and_positioning")
+        if isinstance(raw_pricing, list):
+            data["pricing_and_positioning"] = [
+                {str(k): str(v) for k, v in item.items() if v is not None}
+                for item in raw_pricing
+                if isinstance(item, dict)
+            ]
+        else:
+            data["pricing_and_positioning"] = []
+
+        raw_competitors = data.get("competitors")
+        if not isinstance(raw_competitors, list):
+            data["competitors"] = []
+
+        raw_matrix = data.get("feature_comparison_matrix")
+        if not isinstance(raw_matrix, list):
+            data["feature_comparison_matrix"] = []
+
+        return data
 
 
 def _tool_payload(result: Any) -> dict[str, Any]:
@@ -96,8 +182,7 @@ async def _run_competitive_landscape_analysis(
     """Gather web, patent, ads, and company data for analysis."""
     from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore[import]
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.3)
-    structured_llm = llm.with_structured_output(CompetitiveLandscapeAnalysis)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.3)
 
     user_query = state["user_query"]
 
@@ -118,10 +203,19 @@ async def _run_competitive_landscape_analysis(
     ad_results_raw = await asyncio.gather(*ad_tasks) if ad_tasks else []
 
     scrape_targets: list[str] = []
+    # If the query mentions a domain, scrape it directly
+    domain_match = re.search(
+        r"(?:https?://)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)",
+        user_query,
+    )
+    if domain_match:
+        domain = domain_match.group(0)
+        direct_url = domain if domain.startswith("http") else f"https://{domain}"
+        scrape_targets.append(direct_url)
     if competitor_search.success and competitor_search.data:
         for result in competitor_search.data.get("results", [])[:2]:
             url = result.get("url") or result.get("link")
-            if url:
+            if url and url not in scrape_targets:
                 scrape_targets.append(url)
     scrape_tasks = [scrape_url(url) for url in scrape_targets]
     scrape_results_raw = await asyncio.gather(*scrape_tasks) if scrape_tasks else []
@@ -152,9 +246,31 @@ async def _run_competitive_landscape_analysis(
         f"Evidence payload:\n{json.dumps(prompt_payload, default=str)}"
     )
 
-    analysis = await structured_llm.ainvoke(
+    structured_llm = llm.with_structured_output(CompetitiveLandscapeAnalysis, include_raw=True)
+
+    raw_result = await structured_llm.ainvoke(
         [{"role": "user", "content": analysis_prompt}]
     )
+
+    analysis: CompetitiveLandscapeAnalysis
+    if raw_result.get("parsed") is not None:
+        analysis = raw_result["parsed"]
+    else:
+        # Fallback: extract JSON from raw response text
+        content = ""
+        raw_msg = raw_result.get("raw")
+        if raw_msg is not None and hasattr(raw_msg, "content"):
+            content = raw_msg.content or ""
+        json_match = re.search(r"\{[\s\S]*\}", content)
+        if json_match:
+            try:
+                analysis = CompetitiveLandscapeAnalysis.model_validate(
+                    json.loads(json_match.group())
+                )
+            except (json.JSONDecodeError, ValidationError):
+                analysis = CompetitiveLandscapeAnalysis()
+        else:
+            analysis = CompetitiveLandscapeAnalysis()
 
     return {
         "analysis": analysis.model_dump(),
@@ -213,4 +329,4 @@ async def competitive_landscape_agent(state: OrchestrationState) -> Orchestratio
             "error": str(exc),
         }
 
-    return state
+    return {"agent_outputs": {_AGENT_NAME: state["agent_outputs"][_AGENT_NAME]}}
